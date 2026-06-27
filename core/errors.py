@@ -29,6 +29,11 @@ class WalletError(DomainError):
     pass
 
 
+# --- Match / participation ------------------------------------------------
+class NotParticipant(DomainError):
+    pass
+
+
 # --- Configuration --------------------------------------------------------
 class ConfigError(DomainError):
     pass

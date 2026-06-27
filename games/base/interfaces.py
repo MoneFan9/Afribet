@@ -69,8 +69,10 @@ class GameAI(ABC):
         """
 
     def observe_opponent_move(self, state_before: State, move: Move, player: Player,
-                              profile: dict | None = None) -> dict:
-        """Met à jour et renvoie le profil adverse opaque (entraînement). Défaut : inerte."""
+                              profile: dict | None = None, *, money_mode: bool = False) -> dict:
+        """Met à jour et renvoie le profil adverse opaque (entraînement). Défaut : inerte.
+
+        `money_mode=True` ⇒ aucun apprentissage (équité §7.4)."""
         return profile or {}
 
     def analyze(self, history: list) -> dict:  # pragma: no cover - post-MVP

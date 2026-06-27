@@ -68,6 +68,25 @@ def test_resolution_entrainement_sans_mouvement_financier(house):
     assert Transaction.objects.filter(user=p).count() == 0
 
 
+def test_forfait_entrainement_sans_transaction(house):
+    p = _player("train_ff")
+    m = MatchmakingService().create_training_match(creator=p, ai_level="VIEUX_SAGE")
+    MatchLifecycleService().forfeit(match_id=m.id, user=p)
+    m.refresh_from_db()
+    assert m.status == MatchStatus.COMPLETED and m.end_reason == EndReason.FORFEIT
+    assert Transaction.objects.filter(user=p).count() == 0  # le joueur n'a aucun mouvement
+    assert Transaction.objects.filter(match_id=m.id).count() == 0  # aucun règlement pour ce match
+
+
+def test_void_entrainement_sans_transaction(house):
+    p = _player("train_void")
+    m = MatchmakingService().create_training_match(creator=p, ai_level="VIEUX_SAGE")
+    MatchLifecycleService().void_match(match_id=m.id, reason="server_fault")
+    m.refresh_from_db()
+    assert m.status == MatchStatus.CANCELLED and m.end_reason == EndReason.VOID
+    assert Transaction.objects.filter(user=p).count() == 0
+
+
 def test_api_training(house):
     p = _player("train_api")
     client = APIClient(); client.force_authenticate(p)

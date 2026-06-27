@@ -150,11 +150,16 @@ class PaymentService:
 
     def _fail(self, intent: PaymentIntent) -> None:
         if intent.direction == Direction.OUT:
-            # Payout échoué → re-créditer et marquer la réservation échouée.
-            self.wallet.credit_back(intent.user, Money(intent.amount, intent.currency), reference=str(intent.id))
-            Transaction.objects.filter(
+            # On inverse d'abord la réservation : on ne re-crédite QUE si exactement
+            # une ligne PENDING existait (sinon, rien à inverser → pas de re-crédit
+            # fantôme qui gonflerait le solde).
+            reversed_count = Transaction.objects.filter(
                 reference=str(intent.id), type=TxType.WITHDRAWAL, status=TxStatus.PENDING
             ).update(status=TxStatus.FAILED)
+            if reversed_count == 1:
+                self.wallet.credit_back(
+                    intent.user, Money(intent.amount, intent.currency), reference=str(intent.id)
+                )
         intent.status = IntentStatus.FAILED
         intent.save(update_fields=["status"])
 

@@ -123,6 +123,30 @@ def test_choose_move_accepte_un_profil():
     assert mv in SongoModule().legal_moves(s, 0)
 
 
+def test_nn_entrainement_exploite_le_profil():
+    # Contre-preuve symétrique de §7.4 : en entraînement, un profil à vulnérabilité
+    # élevée MODIFIE réellement l'évaluation (l'IA exploite la faiblesse apprise).
+    plateau = [0] * 14
+    plateau[7] = 1  # adversaire (camp 7-13) vulnérable
+    plateau[8] = 2
+    greniers = [0, 0]
+    neutre = AdaptiveSongoNN(adaptive=True)
+    exploit = AdaptiveSongoNN(adaptive=True)
+    exploit.player_profile["vulnerability_rate"] = 0.9
+    assert exploit.evaluate(plateau, greniers, 0) != neutre.evaluate(plateau, greniers, 0)
+
+
+def test_observe_money_mode_ignore_apprentissage():
+    # Garde §7.4 (défense en profondeur) : en mode argent, observe_opponent_move
+    # n'apprend rien (profil inchangé).
+    from games.base.service import GameService
+
+    svc = GameService()
+    state = svc.init_state("songo")
+    out = svc.observe_opponent_move("songo", state, 0, 0, None, money_mode=True)
+    assert out == {}  # aucun apprentissage
+
+
 def test_nn_entrainement_apprend():
     nn = AdaptiveSongoNN(adaptive=True)
     plateau = [0] * 14

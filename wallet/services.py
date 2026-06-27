@@ -185,6 +185,8 @@ class WalletService:
     # --- Retrait (réservation / re-crédit) — utilisé en Phase 5/7 ---------
     @transaction.atomic
     def reserve_for_payout(self, user, amount: Money, *, reference: str = "") -> Transaction:
+        if not amount.is_positive:
+            raise WalletError("Le montant à réserver doit être strictement positif.")
         wallet = Wallet.objects.select_for_update().get(user=user)
         if wallet.available(Pocket.REAL) < amount:
             raise InsufficientFunds("Solde insuffisant pour le retrait.")
@@ -198,6 +200,8 @@ class WalletService:
     @transaction.atomic
     def credit_back(self, user, amount: Money, *, reference: str = "") -> Transaction:
         """Re-crédite la poche réelle après un payout échoué (CU7)."""
+        if not amount.is_positive:
+            raise WalletError("Le montant à re-créditer doit être strictement positif.")
         wallet = Wallet.objects.select_for_update().get(user=user)
         new_avail = self._add(wallet, "available_balance", amount)
         wallet.save()

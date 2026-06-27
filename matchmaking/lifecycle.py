@@ -89,11 +89,10 @@ class MatchLifecycleService:
     def _advance_ai(self, match: Match, *, human_move=None, pre_state=None, human_idx=None) -> None:
         """Joue les coups de l'IA (Maison) jusqu'au tour de l'humain ou la fin (CU11).
 
-        En mode **entraînement sans enjeu**, l'IA apprend le profil adverse et
-        l'exploite (§7.1). Dès qu'il y a un **enjeu** (réel OU bonus — le bonus a une
-        valeur réelle latente, convertible 200:1), l'adaptation est **désactivée**
-        (§7.4). Comme tout match actuel comporte une mise, l'adaptation reste dormante
-        jusqu'à l'ajout d'un mode entraînement sans escrow.
+        En mode **entraînement sans enjeu** (`is_training`, EF12), l'IA apprend le
+        profil adverse et l'exploite (§7.1). Dès qu'il y a un **enjeu** (réel OU bonus
+        — le bonus a une valeur réelle latente, convertible 200:1), l'adaptation est
+        **désactivée** (§7.4).
         """
         # Enjeu (réel OU bonus) ⇒ pas d'adaptation (§7.4). Entraînement sans enjeu
         # (EF12) ⇒ adaptation autorisée : c'est le point d'entrée du NN adaptatif.

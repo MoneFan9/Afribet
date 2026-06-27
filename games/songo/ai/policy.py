@@ -86,12 +86,16 @@ class AlphaSongoAI(GameAI):
         move = run_mcts(plateau, greniers, player, iters, player, rng, nn)
         return move if move is not None else legal[0]
 
-    def observe_opponent_move(self, state_before: State, move: Move, player: Player, profile: dict | None = None) -> dict:
+    def observe_opponent_move(self, state_before: State, move: Move, player: Player,
+                              profile: dict | None = None, *, money_mode: bool = False) -> dict:
         """Met à jour le profil adverse (entraînement) à partir d'un coup humain.
 
         Renvoie un profil **opaque** (dict sérialisable) que la plateforme persiste
-        sans le comprendre (frontière 1). Jamais appelé en mode argent.
+        sans le comprendre (frontière 1). **Garde §7.4** : en mode argent, aucun
+        apprentissage (défense en profondeur, symétrique de `choose_move`).
         """
+        if money_mode:
+            return profile or {}
         nn = AdaptiveSongoNN(adaptive=True)
         if profile:
             nn.player_profile = dict(profile)

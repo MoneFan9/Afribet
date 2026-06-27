@@ -110,7 +110,14 @@ class Match(models.Model):
         return self.player_1 if index == 0 else self.player_2
 
     def index_for_user(self, user) -> int:
-        return 0 if user.id == self.player_1_id else 1
+        if user.id == self.player_1_id:
+            return 0
+        if user.id == self.player_2_id:
+            return 1
+        # Défense en profondeur : ne jamais traiter un tiers comme player_2.
+        from core.errors import NotParticipant
+
+        raise NotParticipant("Cet utilisateur ne participe pas à ce match.")
 
     def __str__(self) -> str:  # pragma: no cover
         return f"Match {self.id} {self.game_key} [{self.status}]"
