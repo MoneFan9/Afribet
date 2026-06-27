@@ -69,13 +69,31 @@ class SongoModule(GameModule):
 
     # --- Fin de partie -----------------------------------------------------
     def is_terminal(self, state: State) -> bool:
-        return rules.check_fin_partie(state["plateau"], state["greniers"]) != EN_COURS
+        if rules.check_fin_partie(state["plateau"], state["greniers"]) != EN_COURS:
+            return True
+        # Joueur au trait bloqué (aucun coup légal) → la partie s'arrête (CU8).
+        return not self.legal_moves(state, state["current_player"])
 
     def winner(self, state: State) -> Player | None:
         issue = rules.check_fin_partie(state["plateau"], state["greniers"])
-        if issue in (EN_COURS, NUL):
+        if issue not in (EN_COURS, NUL):
+            return issue
+        if issue == NUL:
             return None
-        return issue
+        # check_fin == EN_COURS : seul un blocage peut rendre l'état terminal.
+        if self.legal_moves(state, state["current_player"]):
+            return None  # partie réellement en cours
+        # Blocage : chaque camp encaisse ses graines restantes, on compare.
+        from .constants import TAILLE_CAMP, TOTAL_TROUS
+
+        plateau, greniers = state["plateau"], state["greniers"]
+        g0 = greniers[0] + sum(plateau[0:TAILLE_CAMP])
+        g1 = greniers[1] + sum(plateau[TAILLE_CAMP:TOTAL_TROUS])
+        if g0 > g1:
+            return 0
+        if g1 > g0:
+            return 1
+        return None
 
     # --- Sérialisation (état opaque pour la plateforme) --------------------
     def serialize(self, state: State) -> dict:
