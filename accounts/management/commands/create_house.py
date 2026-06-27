@@ -29,6 +29,24 @@ class Command(BaseCommand):
         if created:
             user.set_unusable_password()
             user.save(update_fields=["password"])
-            self.stdout.write(self.style.SUCCESS("Compte Maison créé."))
+
+        # Wallet + bankroll de la Maison (contrepartie vs IA, §7.3).
+        from decimal import Decimal
+
+        from core import config
+        from wallet.models import Pocket, TxType
+        from wallet.services import WalletService
+
+        wallet = WalletService().ensure_wallet(user)
+        bankroll = Decimal(str(config.get_int("house_initial_bankroll")))
+        if wallet.available_balance < bankroll:
+            from core.money import Money
+
+            top_up = Money(bankroll - wallet.available_balance, wallet.currency)
+            WalletService().credit(user, top_up, TxType.HOUSE_SETTLEMENT, Pocket.REAL,
+                                   reference="house-bankroll")
+
+        if created:
+            self.stdout.write(self.style.SUCCESS("Compte Maison créé et financé."))
         else:
-            self.stdout.write("Compte Maison déjà présent.")
+            self.stdout.write("Compte Maison déjà présent (bankroll vérifiée).")

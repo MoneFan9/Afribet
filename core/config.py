@@ -34,6 +34,9 @@ DEFAULTS: dict[str, object] = {
     "bonus_conversion_threshold": 2_000_000,   # seuil d'une tranche (virtuel)
     "bonus_conversion_real_per_tranche": 10_000,  # réel crédité par tranche (ratio 200:1)
     "bonus_global_conversion_cap": 50_000_000,  # backstop d'exposition (réel)   # TODO confirmer
+    # Maison (contrepartie vs IA, conception §7.3)
+    "house_initial_bankroll": 1_000_000_000,  # liquidité initiale de la Maison    # TODO confirmer
+    "default_ai_level": "ALPHASONGO",     # niveau IA par défaut (pro/légende, §7.3)
     # Classement (conception §15, [DÉFAUT])
     "elo_base": 1200,
     "elo_k": 32,
