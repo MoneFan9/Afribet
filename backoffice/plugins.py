@@ -5,7 +5,10 @@ enfichables, jamais bloquants pour le cœur. Aucun automate réel au MVP (post-M
 """
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
+
+logger = logging.getLogger(__name__)
 
 
 class AdminPlugin(ABC):
@@ -28,7 +31,7 @@ class AdminPluginRegistry:
             try:
                 plugin.on_event(event_type, payload)
             except Exception:  # noqa: BLE001 - un automate ne doit jamais bloquer le cœur
-                continue
+                logger.exception("AdminPlugin %s a échoué sur %s", plugin.key, event_type)
 
     def available(self) -> list[str]:
         return sorted(self._plugins)

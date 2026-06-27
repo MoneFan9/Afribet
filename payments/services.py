@@ -46,6 +46,7 @@ class PaymentService:
 
         compliance = ComplianceService()
         compliance.is_allowed(user, "deposit")
+        compliance.assert_payment_method_allowed(user, method)
         compliance.enforce_limits(user, "deposit", amount)
         # Idempotence requête : une re-soumission avec la même clé renvoie l'intent existant.
         if idempotency_key:
@@ -100,10 +101,26 @@ class PaymentService:
             )
             # Réserve immédiatement le montant (débit available, tx WITHDRAWAL PENDING).
             self.wallet.reserve_for_payout(user, amount, reference=str(intent.id))
-            instruction = provider.initiate_payout(intent)
-            intent.external_ref = instruction.get("external_ref", "")
-            intent.save(update_fields=["external_ref"])
+            # En revue : on RÉSERVE mais on n'initie PAS le payout — attente de
+            # validation admin (le règlement ne peut donc pas se faire sans humain).
+            if not needs_review:
+                instruction = provider.initiate_payout(intent)
+                intent.external_ref = instruction.get("external_ref", "")
+                intent.save(update_fields=["external_ref"])
         return intent
+
+    @transaction.atomic
+    def approve_withdrawal(self, intent: PaymentIntent) -> PaymentIntent:
+        """Validation admin d'un retrait en revue : lève le drapeau et **initie** le payout."""
+        locked = PaymentIntent.objects.select_for_update().get(pk=intent.pk)
+        if not locked.needs_review or locked.status != IntentStatus.PENDING:
+            return locked
+        provider = registry.get(locked.provider_key)
+        instruction = provider.initiate_payout(locked)
+        locked.external_ref = instruction.get("external_ref", "")
+        locked.needs_review = False
+        locked.save(update_fields=["external_ref", "needs_review"])
+        return locked
 
     # --- Callback prestataire (idempotent) -------------------------------
     @transaction.atomic
@@ -152,6 +169,9 @@ class PaymentService:
             intent.save(update_fields=["status"])
             _maybe_grant_welcome_bonus(intent)  # hook bonus (Phase 9)
         else:  # OUT : le débit était déjà réservé ; on le rend définitif.
+            if intent.needs_review:
+                # Garde-fou : un retrait non validé par l'admin ne se règle jamais.
+                raise PaymentError("Retrait en attente de validation admin.")
             updated = Transaction.objects.filter(
                 reference=str(intent.id), type=TxType.WITHDRAWAL, status=TxStatus.PENDING
             ).update(status=TxStatus.SETTLED)

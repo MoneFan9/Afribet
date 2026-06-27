@@ -79,3 +79,25 @@ EF16 (RG, `[AJUSTÉ]` limites joueur) · EF17 (juridiction + moyens autorisés) 
 CU12/CU13 disputes → it. 2 · CU15 ranking → it. 3 · automates AML/collusion réels → post-MVP ·
 messages de prévention + liens d'aide → Phase 10 · reality-checks → Phase 10 ·
 CU16/CU17 bonus → Phase 9.
+
+## Livré vs ossature/reporté (mise à jour post-audit Phase 8)
+**Livré et appliqué** : Jurisdiction + ComplianceProfile (sans cycle FK) ; auto-exclusion
+(bloque dépôt/pari) ; limites **DEPOSIT** et **BET** (joueur ET juridiction, le plus strict) ;
+baisse immédiate / hausse différée ; `effective_rake_rate` (rake borné, prouvé 2 %) ;
+`allowed_payment_methods` **appliqué** au dépôt (EF17) ; `needs_review` **bloquant** (un retrait
+en revue n'est pas initié tant que l'admin n'a pas validé via `approve_withdrawal`) ; hub admin
+(Transaction immuable + lecture seule, PaymentIntent lecture seule + action de validation, User/KYC
+lecture seule, GameSetting câblé) ; AdminPlugin (dispatch journalisé, non-bloquant).
+
+**Ossature / reporté (NON appliqué — à ne pas considérer comme complet)** :
+- `LimitKind.LOSS` et `SESSION_TIME` : modélisés mais **non enforced** (la perte nette / le temps
+  de session ne sont pas encore calculés) → post-MVP.
+- **Contrôle d'âge légal** : `legal_age` stocké mais non appliqué (date de naissance non collectée
+  à l'inscription) → à activer avec le durcissement KYC.
+- **Tableau de bord** (exposition Maison / réconciliation) : `ReconciliationService` existe mais
+  n'est pas surfacé dans une vue admin → à brancher.
+- `report(jurisdiction, …)` : agrégat plateforme global (pas de ventilation par pays) → ossature.
+- `ProviderSetting` : non consulté par le flux paiement (sandbox toujours actif) → ossature.
+- **Durcissement prod** : re-vérifier limites/auto-exclusion sous verrou (TOCTOU) ; immuabilité du
+  registre au niveau DB (contrainte/trigger, en plus de l'override ORM) ; validation de schéma des
+  JSONField `limits`.

@@ -122,6 +122,26 @@ def test_verify_ne_regle_jamais_un_retrait():
     assert intent.status == IntentStatus.PENDING
 
 
+def test_retrait_en_revue_non_regle_avant_validation():
+    from accounts.models import KycStatus
+    from backoffice.models import PlatformConfig
+
+    PlatformConfig.objects.create(key="withdrawal_review_threshold", value=1000)
+    u = _user("rev", kyc_status=KycStatus.VERIFIED)
+    WalletService().credit(u, Money(10000, XAF), TxType.DEPOSIT)
+    svc = PaymentService()
+    intent = svc.withdraw(u, Money(5000, XAF), destination="+24106000000")
+    # En revue : réservé mais NON initié (pas d'external_ref) → impossible à régler.
+    assert intent.needs_review is True and intent.external_ref == ""
+    assert _avail(u) == 5000
+    # Validation admin → initie le payout, puis le callback règle.
+    intent = svc.approve_withdrawal(intent)
+    assert intent.needs_review is False and intent.external_ref != ""
+    svc.handle_callback("sandbox", {"external_ref": intent.external_ref, "status": "SUCCESS"})
+    intent.refresh_from_db()
+    assert intent.status == IntentStatus.SETTLED and _avail(u) == 5000
+
+
 def test_retrait_echec_recredite():
     from accounts.models import KycStatus
 

@@ -25,6 +25,7 @@ from .errors import (
 )
 from .models import (
     ComplianceProfile,
+    ExclusionType,
     Jurisdiction,
     KycLevel,
     LimitKind,
@@ -75,9 +76,16 @@ class ComplianceService:
     def _active_self_exclusion(self, user) -> bool:
         now = timezone.now()
         qs = SelfExclusion.objects.filter(user=user)
-        if qs.filter(type="PERMANENT").exists():
+        if qs.filter(type=ExclusionType.PERMANENT).exists():
             return True
-        return qs.filter(type="TEMPORARY", until__gt=now).exists()
+        return qs.filter(type=ExclusionType.TEMPORARY, until__gt=now).exists()
+
+    def assert_payment_method_allowed(self, user, method: str) -> None:
+        """Refuse un moyen de paiement non autorisé par la juridiction (EF17)."""
+        juris = self.jurisdiction_of(user)
+        if juris and juris.allowed_payment_methods and method:
+            if method not in juris.allowed_payment_methods:
+                raise JurisdictionForbidden(f"Moyen de paiement non autorisé : {method}.")
 
     # --- Limites de jeu responsable (EF16) -------------------------------
     def enforce_limits(self, user, action: str, amount: Money) -> None:
@@ -99,10 +107,14 @@ class ComplianceService:
         ):
             out.append((lim.value, lim.period))
         juris = self.jurisdiction_of(user)
-        if juris and juris.limits:
-            by_period = juris.limits.get(kind) or {}
-            for period, val in by_period.items():
-                out.append((Decimal(str(val)), period))
+        if juris and isinstance(juris.limits, dict):
+            by_period = juris.limits.get(kind)
+            if isinstance(by_period, dict):
+                for period, val in by_period.items():
+                    try:
+                        out.append((Decimal(str(val)), period))
+                    except (TypeError, ValueError, ArithmeticError):
+                        continue  # plafond mal saisi → ignoré (pas de 500)
         return out
 
     def _cumulative(self, user, kind: str, period: str) -> Decimal:

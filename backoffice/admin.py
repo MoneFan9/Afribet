@@ -50,13 +50,25 @@ class PaymentIntentAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "external_ref")
     actions = ["approve_review"]
 
-    @admin.action(description="Valider le retrait en revue (lever needs_review)")
+    readonly_fields = ("user", "direction", "amount", "currency", "provider_key",
+                       "method", "external_ref", "idempotency_key", "destination")
+
+    @admin.action(description="Valider le retrait en revue (initie le payout)")
     def approve_review(self, request, queryset):
-        n = queryset.filter(needs_review=True, status=IntentStatus.PENDING).update(needs_review=False)
-        self.message_user(request, f"{n} retrait(s) validé(s).", messages.SUCCESS)
+        from payments.services import PaymentService
+
+        svc = PaymentService()
+        n = 0
+        for intent in queryset.filter(needs_review=True, status=IntentStatus.PENDING):
+            svc.approve_withdrawal(intent)
+            n += 1
+        self.message_user(request, f"{n} retrait(s) validé(s) et initié(s).", messages.SUCCESS)
 
     def has_add_permission(self, request):
         return False
+
+    def has_change_permission(self, request, obj=None):
+        return False  # lecture seule sauf l'action de validation
 
 
 @admin.register(Match)

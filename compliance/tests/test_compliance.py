@@ -154,3 +154,21 @@ def test_rake_borne_par_max_rake():
 def test_effective_rake_rate_defaut():
     u = _user("er")
     assert ComplianceService().effective_rake_rate(u) == Decimal("0.05")
+
+
+# --- Moyens de paiement autorisés (EF17) ----------------------------------
+def test_moyen_de_paiement_non_autorise():
+    u = _user("mp")
+    _assign(u, allowed_payment_methods=["mtn", "airtel"])
+    with pytest.raises(JurisdictionForbidden):
+        PaymentService().deposit(u, Money(1000, XAF), method="card")
+    out = PaymentService().deposit(u, Money(1000, XAF), method="mtn")  # autorisé → ok
+    assert out["intent"] is not None
+
+
+# --- Limite de dépôt au niveau JURIDICTION (min joueur/juridiction) --------
+def test_limite_depot_au_niveau_juridiction():
+    u = _user("lj")
+    _assign(u, limits={"DEPOSIT": {"DAILY": 2000}})
+    with pytest.raises(LimitExceeded):
+        PaymentService().deposit(u, Money(5000, XAF))
