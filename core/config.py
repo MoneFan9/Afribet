@@ -27,6 +27,8 @@ DEFAULTS: dict[str, object] = {
     "correspondence_move_hours": 24,      # délai par coup en mode différé
     "disconnect_policy": "AUTO_RESOLVE",  # AUTO_RESOLVE | VOID_REFUND
     "access_code_ttl_minutes": 15,        # durée de vie d'un code d'invitation
+    "email_code_ttl_minutes": 10,         # durée de vie d'un code MFA e-mail (CU1)
+    "email_code_max_attempts": 5,         # tentatives avant invalidation du code
     # Bonus & conversion virtuel → réel (conception §16, [DÉFAUT])
     "welcome_bonus_pct": "1.00",          # % du 1er dépôt crédité en virtuel    # TODO confirmer
     "bonus_conversion_threshold": 2_000_000,   # seuil d'une tranche (virtuel)

@@ -26,7 +26,10 @@ def env_bool(key: str, default: bool = False) -> bool:
     return os.environ.get(key, str(default)).lower() in {"1", "true", "yes", "on"}
 
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-change-me")
+SECRET_KEY = env(
+    "DJANGO_SECRET_KEY",
+    "dev-insecure-change-me-0123456789-abcdefghijklmnopqrstuvwxyz",
+)
 DEBUG = env_bool("DJANGO_DEBUG", False)
 ALLOWED_HOSTS = [h for h in env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 
