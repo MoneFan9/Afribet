@@ -62,7 +62,16 @@ class GameAI(ABC):
 
     @abstractmethod
     def choose_move(self, state: State, player: Player, level: str, **kwargs) -> Move:
-        """Choisit un coup pour `player` au niveau `level`."""
+        """Choisit un coup pour `player` au niveau `level`.
+
+        Peut accepter `profile` (dict **opaque**) pour exploiter un profil adverse
+        appris en mode entraînement. En mode argent, ce profil doit être ignoré (§7.4).
+        """
+
+    def observe_opponent_move(self, state_before: State, move: Move, player: Player,
+                              profile: dict | None = None) -> dict:
+        """Met à jour et renvoie le profil adverse opaque (entraînement). Défaut : inerte."""
+        return profile or {}
 
     def analyze(self, history: list) -> dict:  # pragma: no cover - post-MVP
         """Analyse pédagogique post-partie (optionnelle, sans service externe)."""

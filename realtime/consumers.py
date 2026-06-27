@@ -25,7 +25,8 @@ class MatchConsumer(AsyncJsonWebsocketConsumer):
         self.group = f"match_{self.match_id}"
         await self.channel_layer.group_add(self.group, self.channel_name)
         await self.accept()
-        await self._log_presence(user, "CONNECT")
+        # Journalise CONNECT/RECONNECT (audit ENF2) et resynchronise l'état (CU8).
+        await self._on_connect(user)
         await self.send_json({"type": "state", **await self._serialize(match)})
 
     async def disconnect(self, code):
@@ -101,6 +102,7 @@ class MatchConsumer(AsyncJsonWebsocketConsumer):
         PresenceService().schedule_disconnect_timeout(self.match_id, user.id)
 
     @database_sync_to_async
-    def _log_presence(self, user, kind):
-        # La reconnexion resynchronise déjà via l'état envoyé à `connect`.
-        return None
+    def _on_connect(self, user):
+        from matchmaking.lifecycle import MatchLifecycleService
+
+        MatchLifecycleService().on_connect(match_id=self.match_id, user=user)

@@ -38,6 +38,13 @@ class IllegalMove(LifecycleError):
     pass
 
 
+def _schedule_move_timeout(match_id: str) -> None:
+    """Planifie la tâche de timeout de coup (import paresseux : évite le cycle realtime)."""
+    from realtime.services import MoveTimerService
+
+    MoveTimerService().schedule(match_id)
+
+
 class MatchLifecycleService:
     def __init__(self, game_service: GameService | None = None, resolution: MatchResolutionService | None = None):
         self.games = game_service or GameService()
@@ -45,9 +52,15 @@ class MatchLifecycleService:
 
     # --- Helpers ----------------------------------------------------------
     def _arm_deadline(self, match: Match) -> None:
+        """Arme l'échéance du coup et, en temps réel, planifie le timeout (CU8)."""
         if match.timing_mode == TimingMode.REALTIME:
             secs = config.get_int("move_timer_seconds")
             match.move_deadline = timezone.now() + timedelta(seconds=secs)
+            # Planifie le pire-coup-auto à l'expiration, APRÈS commit (la tâche, en
+            # se déclenchant, vérifie l'échéance courante → s'auto-annule si un coup
+            # a entre-temps repoussé le délai). Sans cela, CU8 timeout est inopérant.
+            mid = str(match.id)
+            transaction.on_commit(lambda mid=mid: _schedule_move_timeout(mid))
         else:
             hours = config.get_int("correspondence_move_hours")
             match.move_deadline = timezone.now() + timedelta(hours=hours)
@@ -65,9 +78,20 @@ class MatchLifecycleService:
         match.current_player = self.games.current_player(match.game_key, out["state"])
         return self.games.is_terminal(match.game_key, out["state"])
 
-    def _advance_ai(self, match: Match) -> None:
-        """Joue les coups de l'IA (Maison) jusqu'au tour de l'humain ou la fin (CU11)."""
+    def _advance_ai(self, match: Match, *, human_move=None, pre_state=None, human_idx=None) -> None:
+        """Joue les coups de l'IA (Maison) jusqu'au tour de l'humain ou la fin (CU11).
+
+        En mode **entraînement** (pas argent), l'IA apprend le profil adverse à partir
+        du coup humain et l'exploite (§7.1). En mode **argent**, aucune adaptation (§7.4).
+        """
         money_mode = match.stake_kind == "REAL"
+        training = not money_mode
+        if training and human_move is not None and pre_state is not None and human_idx is not None:
+            match.ai_profile = self.games.observe_opponent_move(
+                match.game_key, pre_state, human_move, human_idx, match.ai_profile
+            )
+        profile = match.ai_profile if training else None
+
         while (
             match.status == MatchStatus.ACTIVE
             and match.opponent_type == OpponentType.AI
@@ -75,7 +99,7 @@ class MatchLifecycleService:
         ):
             move = self.games.ai_move(
                 match.game_key, match.game_state, 1, match.ai_level,
-                money_mode=money_mode, seed=self._next_seq(match),
+                money_mode=money_mode, seed=self._next_seq(match), profile=profile,
             )
             terminal = self._apply(match, 1, move, is_auto=False)
             if terminal:
@@ -97,6 +121,7 @@ class MatchLifecycleService:
         if move not in self.games.legal_moves(match.game_key, match.game_state, idx):
             raise IllegalMove("Coup illégal.")
 
+        pre_state = match.game_state  # état avant le coup (pour l'apprentissage IA)
         terminal = self._apply(match, idx, move, is_auto=False)
         if terminal:
             match.save()
@@ -104,7 +129,7 @@ class MatchLifecycleService:
         self._arm_deadline(match)
         match.save()
         if match.opponent_type == OpponentType.AI:
-            self._advance_ai(match)
+            self._advance_ai(match, human_move=move, pre_state=pre_state, human_idx=idx)
         return match
 
     # --- CU8 : timeout de coup → pire coup auto ---------------------------
@@ -140,45 +165,78 @@ class MatchLifecycleService:
         return self.resolution.forfeit_resolve(match, loser=user)
 
     # --- CU8 : panne serveur → void + remboursement ----------------------
+    @transaction.atomic
     def void_match(self, *, match_id, reason: str = "server_fault") -> Match:
         match = Match.objects.select_for_update().get(id=match_id)
         return self.resolution.void(match, reason=reason)
 
     # --- CU8 : présence (déconnexion / reconnexion) ----------------------
-    def on_disconnect(self, *, match_id, user) -> None:
+    _PRESENCE_TYPES = (EventType.CONNECT, EventType.DISCONNECT, EventType.RECONNECT)
+
+    def _latest_presence(self, match: Match, user) -> str | None:
+        ev = (
+            match.events.filter(type__in=self._PRESENCE_TYPES, data__user=str(user.id))
+            .order_by("-created_at")
+            .first()
+        )
+        return ev.type if ev else None
+
+    def on_connect(self, *, match_id, user) -> dict:
+        """Connexion au plateau : journalise CONNECT/RECONNECT et resynchronise (ENF2)."""
         match = Match.objects.get(id=match_id)
-        MatchEvent.objects.create(match=match, type=EventType.DISCONNECT, data={"user": str(user.id)})
+        # Si une déconnexion précède sans reconnexion, c'est une reconnexion.
+        kind = (
+            EventType.RECONNECT
+            if self._latest_presence(match, user) == EventType.DISCONNECT
+            else EventType.CONNECT
+        )
+        MatchEvent.objects.create(match=match, type=kind, data={"user": str(user.id)})
+        return match.game_state
 
     def on_reconnect(self, *, match_id, user) -> dict:
         match = Match.objects.get(id=match_id)
         MatchEvent.objects.create(match=match, type=EventType.RECONNECT, data={"user": str(user.id)})
         return match.game_state  # resynchro
 
+    def on_disconnect(self, *, match_id, user) -> None:
+        match = Match.objects.get(id=match_id)
+        MatchEvent.objects.create(match=match, type=EventType.DISCONNECT, data={"user": str(user.id)})
+
     @transaction.atomic
     def on_disconnect_timeout(self, *, match_id, user) -> Match:
-        """Fin de fenêtre de grâce, joueur non revenu → applique `DisconnectPolicy`."""
+        """Fin de fenêtre de grâce → applique `DisconnectPolicy` SI le joueur est absent."""
         match = Match.objects.select_for_update().get(id=match_id)
         if match.status != MatchStatus.ACTIVE:
+            return match
+        # Équité (CRITIQUE) : si le joueur est revenu (dernier évènement de présence
+        # ≠ DISCONNECT), on ne sanctionne pas une défaillance déjà récupérée.
+        if self._latest_presence(match, user) != EventType.DISCONNECT:
             return match
         policy = config.get_str("disconnect_policy")
         if policy == "VOID_REFUND":
             return self.resolution.void(match, reason="disconnect_void")
-        # AUTO_RESOLVE (défaut) : la partie se poursuit en coups auto jusqu'à résolution.
-        return self._auto_finish(match)
+        # AUTO_RESOLVE (défaut) : on auto-joue UNIQUEMENT pour l'absent ; le joueur
+        # resté connecté n'est jamais forcé (les coups auto de l'absent sont ensuite
+        # assurés par le timer de coup à chaque tour).
+        return self._auto_finish(match, absent_idx=match.index_for_user(user))
 
-    def _auto_finish(self, match: Match) -> Match:
-        """Joue le pire coup pour le joueur au trait jusqu'à terminer (anti-rage-quit)."""
+    def _auto_finish(self, match: Match, *, absent_idx: int) -> Match:
+        """Joue le pire coup pour l'absent tant que c'est son tour (anti-rage-quit, équité)."""
         guard = 0
         while match.status == MatchStatus.ACTIVE and guard < 2000:
             if self.games.is_terminal(match.game_key, match.game_state):
                 match.save()
                 return self.resolution.resolve(match)
-            idx = match.current_player
-            move = self.games.worst_move(match.game_key, match.game_state, idx)
-            terminal = self._apply(match, idx, move, is_auto=True)
+            if match.current_player != absent_idx:
+                # Tour du joueur présent : on le laisse jouer, on ne force rien.
+                match.save()
+                return match
+            move = self.games.worst_move(match.game_key, match.game_state, absent_idx)
+            terminal = self._apply(match, absent_idx, move, is_auto=True)
             if terminal:
                 match.save()
                 return self.resolution.resolve(match)
+            self._arm_deadline(match)
             match.save()
             guard += 1
         return match

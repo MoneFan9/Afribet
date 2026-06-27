@@ -93,6 +93,25 @@ def test_nn_money_mode_ignore_le_profil():
     assert nn.evaluate(plateau, greniers, 0) == base
 
 
+def test_observe_opponent_move_via_service():
+    # L'apprentissage du profil adverse est exposé en dict OPAQUE par la façade
+    # (frontière 1 : la plateforme persiste sans comprendre).
+    svc = GameService()
+    state = svc.init_state("songo")
+    profile = svc.observe_opponent_move("songo", state, 0, 0, None)
+    assert profile["total_moves"] == 1
+    profile2 = svc.observe_opponent_move("songo", state, 0, 0, profile)
+    assert profile2["total_moves"] == 2
+
+
+def test_choose_move_accepte_un_profil():
+    ai = AlphaSongoAI()
+    s = SongoModule().init_state()
+    profile = {"favored_holes": [0] * 7, "vulnerability_rate": 0.5, "total_moves": 3}
+    mv = ai.choose_move(s, 0, ALPHASONGO, seed=3, iterations=40, profile=profile)
+    assert mv in SongoModule().legal_moves(s, 0)
+
+
 def test_nn_entrainement_apprend():
     nn = AdaptiveSongoNN(adaptive=True)
     plateau = [0] * 14

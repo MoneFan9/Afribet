@@ -213,8 +213,15 @@ class MatchmakingService:
 
     @transaction.atomic
     def _merge(self, a_id, b_id) -> bool:
-        a = Match.objects.select_for_update().get(id=a_id)
-        b = Match.objects.select_for_update().get(id=b_id)
+        # Verrouillage dans un ordre stable (par id) — anti-interblocage si deux
+        # workers d'appariement tournent en parallèle.
+        first_id, second_id = sorted([a_id, b_id], key=str)
+        locked = {
+            m.id: m
+            for m in Match.objects.select_for_update().filter(id__in=[first_id, second_id])
+        }
+        a = locked[a_id]
+        b = locked[b_id]
         if a.status != MatchStatus.PENDING or b.status != MatchStatus.PENDING:
             return False
         pocket = pocket_for(a.stake_kind)

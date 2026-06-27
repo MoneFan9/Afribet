@@ -73,3 +73,4 @@ async def test_ws_refuse_sans_token():
     comm = WebsocketCommunicator(application, f"/ws/match/{data['mid']}/")
     connected, _ = await comm.connect()
     assert connected is False  # non authentifié → fermeture
+    await comm.disconnect()  # teardown propre (évite le warning event loop)

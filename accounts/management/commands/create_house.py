@@ -39,12 +39,17 @@ class Command(BaseCommand):
 
         wallet = WalletService().ensure_wallet(user)
         bankroll = Decimal(str(config.get_int("house_initial_bankroll")))
-        if wallet.available_balance < bankroll:
-            from core.money import Money
+        from core.money import Money
 
+        # Bankroll réelle (parties argent) ET bonus (parties virtuelles vs Maison, §16).
+        if wallet.available_balance < bankroll:
             top_up = Money(bankroll - wallet.available_balance, wallet.currency)
             WalletService().credit(user, top_up, TxType.HOUSE_SETTLEMENT, Pocket.REAL,
                                    reference="house-bankroll")
+        if wallet.bonus_available < bankroll:
+            top_up_bonus = Money(bankroll - wallet.bonus_available, wallet.currency)
+            WalletService().credit(user, top_up_bonus, TxType.HOUSE_SETTLEMENT, Pocket.BONUS,
+                                   reference="house-bonus-bankroll")
 
         if created:
             self.stdout.write(self.style.SUCCESS("Compte Maison créé et financé."))

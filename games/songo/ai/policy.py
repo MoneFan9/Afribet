@@ -50,6 +50,7 @@ class AlphaSongoAI(GameAI):
         seed: int = 0,
         iterations: int | None = None,
         max_depth: int = 6,
+        profile: dict | None = None,
     ) -> Move:
         plateau = list(state["plateau"])
         greniers = list(state["greniers"])
@@ -72,8 +73,27 @@ class AlphaSongoAI(GameAI):
             move = AlphaBeta().iterative_deepening(plateau, greniers, player, max_depth)
             return move if move is not None else legal[0]
 
-        # ALPHASONGO (et défaut) : MCTS + NN. Adaptation désactivée en mode argent.
-        nn = AdaptiveSongoNN(adaptive=not money_mode)
+        # ALPHASONGO (et défaut) : MCTS + NN. En mode argent, force fixe (adaptation
+        # désactivée, §7.4). En entraînement, un profil adverse opaque persistant peut
+        # être fourni (l'IA exploite alors les faiblesses apprises).
+        if money_mode:
+            nn = AdaptiveSongoNN(adaptive=False)  # jamais d'exploitation en argent
+        else:
+            nn = AdaptiveSongoNN(adaptive=True)
+            if profile:
+                nn.player_profile = dict(profile)
         iters = iterations if iterations is not None else DEFAULT_MCTS_ITERATIONS
         move = run_mcts(plateau, greniers, player, iters, player, rng, nn)
         return move if move is not None else legal[0]
+
+    def observe_opponent_move(self, state_before: State, move: Move, player: Player, profile: dict | None = None) -> dict:
+        """Met à jour le profil adverse (entraînement) à partir d'un coup humain.
+
+        Renvoie un profil **opaque** (dict sérialisable) que la plateforme persiste
+        sans le comprendre (frontière 1). Jamais appelé en mode argent.
+        """
+        nn = AdaptiveSongoNN(adaptive=True)
+        if profile:
+            nn.player_profile = dict(profile)
+        nn.learn(move, list(state_before["plateau"]), player)
+        return nn.player_profile

@@ -211,6 +211,16 @@ def test_module_worst_move_est_legal_et_deterministe():
     assert m.worst_move(s, 0) == wm  # déterministe
 
 
+def test_module_winner_sur_blocage():
+    # Joueur 0 sans coup légal (camp 0-6 vide) mais board >= 10 (pas rareté) :
+    # partie terminale par blocage, chacun encaisse son camp → joueur 1 gagne.
+    m = SongoModule()
+    s = {"plateau": [0] * 7 + [5, 5, 0, 0, 0, 0, 0], "greniers": [3, 0], "current_player": 0}
+    assert m.legal_moves(s, 0) == []
+    assert m.is_terminal(s) is True
+    assert m.winner(s) == 1
+
+
 def test_module_terminal_et_winner():
     m = SongoModule()
     s = {"plateau": [0] * 14, "greniers": [40, 0], "current_player": 0}

@@ -55,3 +55,10 @@ class GameService:
         module = self._registry.get(game_key)
         ai = self._registry.get_ai(game_key)
         return ai.choose_move(module.deserialize(state), player, level, **kwargs)
+
+    def observe_opponent_move(self, game_key: str, state_before: dict, move: Move,
+                              player: Player, profile: dict | None = None) -> dict:
+        """Met à jour le profil adverse opaque (entraînement) après un coup humain."""
+        module = self._registry.get(game_key)
+        ai = self._registry.get_ai(game_key)
+        return ai.observe_opponent_move(module.deserialize(state_before), move, player, profile)

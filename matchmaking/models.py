@@ -72,6 +72,9 @@ class Match(models.Model):
     status = models.CharField(max_length=10, choices=MatchStatus.choices, default=MatchStatus.PENDING)
     current_player = models.PositiveSmallIntegerField(default=0)
     ai_level = models.CharField(max_length=16, blank=True, default="")
+    # Profil adverse appris par l'IA (mode entraînement uniquement ; jamais en argent
+    # — équité §7.4). Persisté entre les coups d'un même match. Opaque côté jeu.
+    ai_profile = models.JSONField(null=True, blank=True)
     rake_amount = models.DecimalField(max_digits=20, decimal_places=2, default=0)
     end_reason = models.CharField(max_length=10, choices=EndReason.choices, blank=True, default="")
     move_deadline = models.DateTimeField(null=True, blank=True)

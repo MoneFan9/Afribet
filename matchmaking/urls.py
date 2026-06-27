@@ -12,6 +12,7 @@ from .views import (
     LobbyView,
     MatchDetailView,
     PlayView,
+    RegenerateCodeView,
 )
 
 app_name = "matchmaking"
@@ -23,6 +24,7 @@ urlpatterns = [
     path("<uuid:match_id>/", MatchDetailView.as_view(), name="detail"),
     path("<uuid:match_id>/join/", JoinLobbyView.as_view(), name="join"),
     path("<uuid:match_id>/cancel/", CancelView.as_view(), name="cancel"),
+    path("<uuid:match_id>/regenerate-code/", RegenerateCodeView.as_view(), name="regenerate-code"),
     path("<uuid:match_id>/play/", PlayView.as_view(), name="play"),
     path("<uuid:match_id>/forfeit/", ForfeitView.as_view(), name="forfeit"),
 ]

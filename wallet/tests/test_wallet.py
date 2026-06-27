@@ -184,3 +184,61 @@ def test_reserve_et_credit_back():
     assert _avail(u) == 600
     svc.credit_back(u, Money(400, XAF), reference="wd1-failed")
     assert _avail(u) == 1000
+
+
+def test_reserve_insuffisant_refuse():
+    svc, u = _svc_with_funds("pr", 100)
+    with pytest.raises(InsufficientFunds):
+        svc.reserve_for_payout(u, Money(500, XAF))
+    assert _avail(u) == 100
+
+
+def test_credit_montant_non_positif_refuse():
+    from core.errors import WalletError
+
+    svc, u = _svc_with_funds("np", 0)
+    with pytest.raises(WalletError):
+        svc.credit(u, Money(0, XAF), TxType.DEPOSIT)
+    with pytest.raises(WalletError):
+        svc.lock_funds(u, Money(0, XAF), Pocket.REAL)
+
+
+# --- Règlement vs-IA (Maison gagnante / perdante) — chemin MVP critique ---
+def _setup_vs_ia(player_funds=10000, house_funds=100000, stake=500):
+    svc = WalletService()
+    p = _user("ia_p")
+    house = _user("ia_house")
+    svc.ensure_wallet(p)
+    svc.ensure_wallet(house)
+    svc.credit(p, Money(player_funds, XAF), TxType.DEPOSIT)
+    svc.credit(house, Money(house_funds, XAF), TxType.HOUSE_SETTLEMENT)
+    s = Money(stake, XAF)
+    svc.lock_funds(p, s, Pocket.REAL)
+    svc.lock_funds(house, s, Pocket.REAL)
+    return svc, p, house, s
+
+
+def test_settle_vs_ia_joueur_gagne():
+    svc, p, house, s = _setup_vs_ia()
+    total_avant = _total(p) + _total(house)
+    res = svc.settle_escrow(match_id=None, winner=p, loser=house, stake=s,
+                            pocket=Pocket.REAL, house=house, rake_rate=Decimal("0.05"))
+    assert res["rake"] == Money(50, XAF)
+    assert svc.get_balance(p)["real_available"].amount == 9500 + 950
+    assert svc.get_balance(p)["real_locked"].amount == 0
+    # Conservation globale (la Maison perd net 450, encaisse 50 de rake).
+    assert _total(p) + _total(house) == total_avant
+
+
+def test_settle_vs_ia_maison_gagne():
+    svc, p, house, s = _setup_vs_ia()
+    total_avant = _total(p) + _total(house)
+    # Maison gagnante : elle est à la fois winner ET bénéficiaire du rake (même wallet).
+    res = svc.settle_escrow(match_id=None, winner=house, loser=p, stake=s,
+                            pocket=Pocket.REAL, house=house, rake_rate=Decimal("0.05"))
+    assert svc.get_balance(p)["real_locked"].amount == 0
+    assert svc.get_balance(house)["real_locked"].amount == 0
+    # La Maison récupère le pot entier (payout 950 + rake 50 = 1000), le joueur perd sa mise.
+    assert svc.get_balance(p)["real_available"].amount == 9500
+    assert _total(p) + _total(house) == total_avant
+    assert res["pot"] == Money(1000, XAF)

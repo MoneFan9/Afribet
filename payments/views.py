@@ -25,8 +25,11 @@ class DepositView(APIView):
         s = DepositSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         amount = Money(s.validated_data["amount"], settings.DEFAULT_CURRENCY)
+        idem = request.headers.get("Idempotency-Key") or None
         try:
-            out = PaymentService().deposit(request.user, amount, method=s.validated_data["method"])
+            out = PaymentService().deposit(
+                request.user, amount, method=s.validated_data["method"], idempotency_key=idem
+            )
         except DomainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         intent = out["intent"]

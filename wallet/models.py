@@ -41,6 +41,8 @@ class TxStatus(models.TextChoices):
 
 
 class Wallet(models.Model):
+    # NB : DecimalField(2) pour rester multi-devises ; pour XAF (0 décimale) c'est
+    # `Money` qui normalise/quantifie à la construction (aucun centime fantôme créé).
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="wallet"

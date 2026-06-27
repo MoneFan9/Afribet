@@ -54,6 +54,8 @@ class SongoModule(GameModule):
 
         Sert au timeout (CU8) : un coup auto faible, jamais une défaite immédiate
         gratuite ni un coup illégal. Déterministe (départage : plus petit indice).
+        Heuristique **à 1 pli** (gain immédiat seulement) : ne regarde pas la riposte
+        adverse — choix assumé pour un coup auto simple et prévisible.
         """
         legal = self.legal_moves(state, player)
         if not legal:

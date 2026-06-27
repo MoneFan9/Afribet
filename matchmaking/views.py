@@ -94,6 +94,17 @@ class CancelView(APIView):
         return Response(MatchSerializer(match).data)
 
 
+class RegenerateCodeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, match_id):
+        try:
+            match = MatchmakingService().regenerate_code(creator=request.user, match_id=match_id)
+        except DomainError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(MatchSerializer(match).data)
+
+
 class PlayView(APIView):
     permission_classes = [IsAuthenticated]
 

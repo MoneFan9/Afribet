@@ -33,9 +33,17 @@ class PaymentService:
         self.wallet = wallet_service or WalletService()
 
     # --- Dépôt (CU2) ------------------------------------------------------
-    def deposit(self, user, amount: Money, *, method: str = "", provider_key: str = "sandbox") -> dict:
+    def deposit(
+        self, user, amount: Money, *, method: str = "", provider_key: str = "sandbox",
+        idempotency_key: str | None = None,
+    ) -> dict:
         if not amount.is_positive:
             raise PaymentError("Le montant du dépôt doit être positif.")
+        # Idempotence requête : une re-soumission avec la même clé renvoie l'intent existant.
+        if idempotency_key:
+            existing = PaymentIntent.objects.filter(idempotency_key=idempotency_key).first()
+            if existing is not None:
+                return {"intent": existing, "instruction": "Dépôt déjà initié."}
         provider = registry.get(provider_key)
         intent = PaymentIntent.objects.create(
             user=user,
@@ -44,7 +52,7 @@ class PaymentService:
             currency=amount.currency,
             provider_key=provider_key,
             method=method,
-            idempotency_key=uuid.uuid4().hex,
+            idempotency_key=idempotency_key or uuid.uuid4().hex,
         )
         instruction = provider.initiate_deposit(intent)
         intent.external_ref = instruction.get("external_ref", "")
@@ -97,7 +105,13 @@ class PaymentService:
         return intent
 
     def verify(self, intent: PaymentIntent) -> PaymentIntent:
-        """Vérification active de secours (si le callback manque)."""
+        """Vérification active de secours pour un **dépôt** (si le callback manque).
+
+        Bornée à `direction == IN` : on ne règle jamais un **retrait** par simple
+        vérification optimiste (un payout doit être confirmé par le prestataire).
+        """
+        if intent.direction != Direction.IN:
+            return intent
         provider = registry.get(intent.provider_key)
         if intent.status == IntentStatus.PENDING and provider.verify(intent.external_ref):
             with transaction.atomic():
@@ -116,9 +130,14 @@ class PaymentService:
             intent.save(update_fields=["status"])
             _maybe_grant_welcome_bonus(intent)  # hook bonus (Phase 9)
         else:  # OUT : le débit était déjà réservé ; on le rend définitif.
-            Transaction.objects.filter(
+            updated = Transaction.objects.filter(
                 reference=str(intent.id), type=TxType.WITHDRAWAL, status=TxStatus.PENDING
             ).update(status=TxStatus.SETTLED)
+            if updated != 1:
+                # Incohérence : pas exactement une réservation à régler → on refuse.
+                raise PaymentError(
+                    f"Réservation de retrait introuvable/multiple ({updated}) pour {intent.id}."
+                )
             intent.status = IntentStatus.SETTLED
             intent.save(update_fields=["status"])
 

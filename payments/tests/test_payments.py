@@ -103,6 +103,17 @@ def test_retrait_kyc_ok_reserve_puis_regle():
     assert _avail(u) == 6000  # débit définitif
 
 
+def test_verify_ne_regle_jamais_un_retrait():
+    from accounts.models import KycStatus
+
+    u = _user("vko", kyc_status=KycStatus.VERIFIED)
+    WalletService().credit(u, Money(10000, XAF), TxType.DEPOSIT)
+    intent = PaymentService().withdraw(u, Money(4000, XAF), destination="+24106000000")
+    PaymentService().verify(intent)  # OUT : verify optimiste ne doit pas régler
+    intent.refresh_from_db()
+    assert intent.status == IntentStatus.PENDING
+
+
 def test_retrait_echec_recredite():
     from accounts.models import KycStatus
 

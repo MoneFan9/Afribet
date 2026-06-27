@@ -20,7 +20,7 @@ from matchmaking.lifecycle import (
 from matchmaking.models import EndReason, EventType, MatchStatus, OpponentType, StakeKind
 from matchmaking.resolution import MatchResolutionService
 from matchmaking.services import MatchmakingService
-from wallet.models import TxType
+from wallet.models import Pocket, TxType
 from wallet.services import WalletService
 
 User = get_user_model()
@@ -111,6 +111,17 @@ def test_resolution_victoire_regle_escrow(house):
     assert _avail(house) > 0  # rake encaissé
 
 
+def test_double_resolve_idempotent(house):
+    m, a, b = _active_p2p(bet=500)
+    m.game_state = {"plateau": [0] * 14, "greniers": [40, 0], "current_player": 0}
+    m.save(update_fields=["game_state"])
+    r = MatchResolutionService()
+    r.resolve(m)
+    apres = _avail(a)
+    r.resolve(m)  # second appel : match déjà COMPLETED → no-op
+    assert _avail(a) == apres  # aucun double règlement
+
+
 def test_resolution_nul_rembourse(house):
     m, a, b = _active_p2p(bet=500)
     m.game_state = {"plateau": [0] * 14, "greniers": [0, 0], "current_player": 0}  # rareté, égalité
@@ -156,20 +167,72 @@ def test_void_rembourse_les_deux(house):
 
 
 # --- CU8 : DisconnectPolicy ----------------------------------------------
-def test_disconnect_auto_resolve_termine_la_partie(house):
+def test_disconnect_auto_resolve_ne_force_que_labsent(house):
+    # a (player_1, à son tour) se déconnecte → seul SON pire coup est auto-joué ;
+    # le joueur présent b n'est jamais forcé (équité).
     m, a, b = _active_p2p()
-    MatchLifecycleService().on_disconnect_timeout(match_id=m.id, user=a)
+    life = MatchLifecycleService()
+    life.on_disconnect(match_id=m.id, user=a)
+    life.on_disconnect_timeout(match_id=m.id, user=a)
     m.refresh_from_db()
-    assert m.status == MatchStatus.COMPLETED  # auto-finish → résolu
+    assert m.status == MatchStatus.ACTIVE          # b garde la main
+    assert m.current_player == 1                   # tour passé à b
+    auto = m.moves.filter(is_auto=True)
+    assert auto.count() == 1 and auto.first().player == 0  # seul l'absent a été forcé
 
 
 def test_disconnect_void_refund(house):
     PlatformConfig.objects.create(key="disconnect_policy", value="VOID_REFUND")
     m, a, b = _active_p2p()
-    MatchLifecycleService().on_disconnect_timeout(match_id=m.id, user=a)
+    life = MatchLifecycleService()
+    life.on_disconnect(match_id=m.id, user=a)
+    life.on_disconnect_timeout(match_id=m.id, user=a)
     m.refresh_from_db()
     assert m.status == MatchStatus.CANCELLED and m.end_reason == EndReason.VOID
     assert _avail(a) == 10000 and _avail(b) == 10000
+
+
+def test_reconnexion_annule_la_sanction(house):
+    # CRITIQUE : un joueur déconnecté PUIS revenu dans la grâce n'est pas sanctionné.
+    m, a, b = _active_p2p()
+    life = MatchLifecycleService()
+    life.on_disconnect(match_id=m.id, user=a)
+    life.on_connect(match_id=m.id, user=a)  # reconnexion (journalise RECONNECT)
+    life.on_disconnect_timeout(match_id=m.id, user=a)  # le timer de grâce se déclenche
+    m.refresh_from_db()
+    assert m.status == MatchStatus.ACTIVE      # pas voidé, pas auto-résolu
+    assert m.moves.count() == 0                # aucun coup forcé
+    assert m.events.filter(type=EventType.RECONNECT).exists()
+
+
+def test_timer_de_coup_planifie_apres_coup(house, django_capture_on_commit_callbacks):
+    # CRITIQUE : en temps réel, un timeout de coup est planifié après chaque coup.
+    from games.base.service import GameService
+
+    m, a, b = _active_p2p()
+    legal = GameService().legal_moves("songo", m.game_state, 0)
+    with django_capture_on_commit_callbacks(execute=False) as callbacks:
+        MatchLifecycleService().play_move(match_id=m.id, user=a, move=legal[0])
+    assert len(callbacks) >= 1  # planification du pire-coup-auto à expiration
+
+
+# --- CU11 : IA adaptative (mode entraînement) -----------------------------
+def test_ia_apprend_le_profil_en_entrainement(house):
+    # En vs IA virtuel (non-argent), l'IA apprend le profil adverse (§7.1).
+    from games.base.service import GameService
+
+    p = _player("train")
+    WalletService().credit(p, Money(5000, XAF), TxType.BONUS_GRANT, Pocket.BONUS)
+    m = MatchmakingService().create_challenge(
+        creator=p, game_key="songo", opponent_type=OpponentType.AI,
+        timing_mode="REALTIME", pairing_mode="AUTO", stake_kind=StakeKind.BONUS,
+        bet_amount=Money(500, XAF), ai_level="VIEUX_SAGE",
+    )
+    legal = GameService().legal_moves("songo", m.game_state, 0)
+    m2 = MatchLifecycleService().play_move(match_id=m.id, user=p, move=legal[0])
+    if m2.status == MatchStatus.ACTIVE:  # si la partie continue, le profil est mémorisé
+        assert m2.ai_profile is not None
+        assert m2.ai_profile["total_moves"] >= 1
 
 
 # --- CU11 : vs IA ---------------------------------------------------------
