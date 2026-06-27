@@ -257,6 +257,11 @@ class MatchLifecycleService:
                 return match
             move = self.games.worst_move(match.game_key, match.game_state, absent_idx)
             terminal = self._apply(match, absent_idx, move, is_auto=True)
+            # Audit (ENF2) : tracer chaque coup forcé pour cause de déconnexion.
+            MatchEvent.objects.create(
+                match=match, type=EventType.TIMEOUT_AUTOMOVE,
+                data={"player": absent_idx, "move": move, "cause": "disconnect"},
+            )
             if terminal:
                 match.save()
                 return self.resolution.resolve(match)

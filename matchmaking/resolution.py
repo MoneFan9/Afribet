@@ -90,10 +90,6 @@ class MatchResolutionService:
         loser_idx = match.index_for_user(loser)
         return self._win_with_reason(match, 1 - loser_idx, EndReason.FORFEIT)
 
-    def timeout_disconnect_resolve(self, match: Match, *, loser, reason: str) -> Match:
-        loser_idx = match.index_for_user(loser)
-        return self._win_with_reason(match, 1 - loser_idx, reason)
-
     @transaction.atomic
     def _win_with_reason(self, match: Match, winner_idx: int, reason: str) -> Match:
         match = Match.objects.select_for_update().get(pk=match.pk)

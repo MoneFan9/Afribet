@@ -34,13 +34,6 @@ User = get_user_model()
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sans I/O/0/1 (lisibilité)
 
 
-def _schedule_move_timeout(match_id: str) -> None:
-    """Planifie la tâche de timeout de coup (import paresseux : évite le cycle realtime)."""
-    from realtime.services import MoveTimerService
-
-    MoveTimerService().schedule(match_id)
-
-
 # --- Erreurs CU3-CU4 ------------------------------------------------------
 class MatchmakingError(DomainError):
     pass
@@ -115,8 +108,11 @@ class MatchmakingService:
         match.save()
         # Planifie le timeout du **1er coup** (sinon aucun timeout serveur au tour
         # initial — équité CU8). Après commit ; la tâche s'auto-annule si un coup
-        # repousse l'échéance.
+        # repousse l'échéance. Helper partagé avec le lifecycle (import paresseux :
+        # évite le cycle de modules).
         if match.timing_mode == TimingMode.REALTIME:
+            from .lifecycle import _schedule_move_timeout
+
             mid = str(match.id)
             transaction.on_commit(lambda mid=mid: _schedule_move_timeout(mid))
 
