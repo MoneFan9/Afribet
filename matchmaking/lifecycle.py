@@ -18,7 +18,15 @@ from core import config
 from core.errors import DomainError
 from games.base.service import GameService
 
-from .models import EventType, Match, MatchEvent, MatchStatus, OpponentType, TimingMode
+from .models import (
+    EventType,
+    Match,
+    MatchEvent,
+    MatchStatus,
+    OpponentType,
+    StakeKind,
+    TimingMode,
+)
 from .resolution import MatchResolutionService
 
 
@@ -81,10 +89,13 @@ class MatchLifecycleService:
     def _advance_ai(self, match: Match, *, human_move=None, pre_state=None, human_idx=None) -> None:
         """Joue les coups de l'IA (Maison) jusqu'au tour de l'humain ou la fin (CU11).
 
-        En mode **entraînement** (pas argent), l'IA apprend le profil adverse à partir
-        du coup humain et l'exploite (§7.1). En mode **argent**, aucune adaptation (§7.4).
+        En mode **entraînement sans enjeu**, l'IA apprend le profil adverse et
+        l'exploite (§7.1). Dès qu'il y a un **enjeu** (réel OU bonus — le bonus a une
+        valeur réelle latente, convertible 200:1), l'adaptation est **désactivée**
+        (§7.4). Comme tout match actuel comporte une mise, l'adaptation reste dormante
+        jusqu'à l'ajout d'un mode entraînement sans escrow.
         """
-        money_mode = match.stake_kind == "REAL"
+        money_mode = match.stake_kind in (StakeKind.REAL, StakeKind.BONUS)
         training = not money_mode
         if training and human_move is not None and pre_state is not None and human_idx is not None:
             match.ai_profile = self.games.observe_opponent_move(
@@ -173,12 +184,15 @@ class MatchLifecycleService:
     # --- CU8 : présence (déconnexion / reconnexion) ----------------------
     _PRESENCE_TYPES = (EventType.CONNECT, EventType.DISCONNECT, EventType.RECONNECT)
 
-    def _latest_presence(self, match: Match, user) -> str | None:
-        ev = (
+    def _latest_presence_event(self, match: Match, user):
+        return (
             match.events.filter(type__in=self._PRESENCE_TYPES, data__user=str(user.id))
             .order_by("-created_at")
             .first()
         )
+
+    def _latest_presence(self, match: Match, user) -> str | None:
+        ev = self._latest_presence_event(match, user)
         return ev.type if ev else None
 
     def on_connect(self, *, match_id, user) -> dict:
@@ -198,19 +212,29 @@ class MatchLifecycleService:
         MatchEvent.objects.create(match=match, type=EventType.RECONNECT, data={"user": str(user.id)})
         return match.game_state  # resynchro
 
-    def on_disconnect(self, *, match_id, user) -> None:
+    def on_disconnect(self, *, match_id, user) -> MatchEvent:
         match = Match.objects.get(id=match_id)
-        MatchEvent.objects.create(match=match, type=EventType.DISCONNECT, data={"user": str(user.id)})
+        return MatchEvent.objects.create(
+            match=match, type=EventType.DISCONNECT, data={"user": str(user.id)}
+        )
 
     @transaction.atomic
-    def on_disconnect_timeout(self, *, match_id, user) -> Match:
-        """Fin de fenêtre de grâce → applique `DisconnectPolicy` SI le joueur est absent."""
+    def on_disconnect_timeout(self, *, match_id, user, disconnect_event_id=None) -> Match:
+        """Fin de fenêtre de grâce → applique `DisconnectPolicy` SI le joueur est absent.
+
+        `disconnect_event_id` époche le timer : si une déconnexion **plus récente** a eu
+        lieu (id différent), c'est son propre timer qui décidera — on s'efface pour ne
+        pas raccourcir la grâce de la déconnexion courante.
+        """
         match = Match.objects.select_for_update().get(id=match_id)
         if match.status != MatchStatus.ACTIVE:
             return match
-        # Équité (CRITIQUE) : si le joueur est revenu (dernier évènement de présence
-        # ≠ DISCONNECT), on ne sanctionne pas une défaillance déjà récupérée.
-        if self._latest_presence(match, user) != EventType.DISCONNECT:
+        latest = self._latest_presence_event(match, user)
+        # Équité (CRITIQUE) : joueur revenu (dernier évènement ≠ DISCONNECT) → on n'agit pas.
+        if latest is None or latest.type != EventType.DISCONNECT:
+            return match
+        # Timer périmé : une déconnexion plus récente le supersède.
+        if disconnect_event_id is not None and str(latest.id) != str(disconnect_event_id):
             return match
         policy = config.get_str("disconnect_policy")
         if policy == "VOID_REFUND":

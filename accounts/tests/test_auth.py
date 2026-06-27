@@ -14,6 +14,7 @@ from accounts.services import (
     CodeExpired,
     InvalidCode,
     PhoneAlreadyUsed,
+    RegistrationError,
 )
 
 User = get_user_model()
@@ -28,8 +29,10 @@ def _latest_code(user) -> str:
 
 @pytest.mark.django_db
 @LOCMEM
-def test_register_cree_compte_inactif_et_envoie_code():
-    user = AuthService().register(**VALID)
+def test_register_cree_compte_inactif_et_envoie_code(django_capture_on_commit_callbacks):
+    # L'e-mail est envoyé via transaction.on_commit → on capture/exécute les callbacks.
+    with django_capture_on_commit_callbacks(execute=True):
+        user = AuthService().register(**VALID)
     assert user.is_active is False
     assert user.kyc_status == KycStatus.PENDING  # KYC différé
     assert user.phone_number == VALID["phone"]
@@ -67,6 +70,42 @@ def test_verify_code_incorrect_incremente_tentatives():
         svc.verify_email_code(email=VALID["email"], code="000000")
     entry = EmailVerificationCode.objects.filter(user=user).latest("created_at")
     assert entry.attempts == 1
+    user.refresh_from_db()
+    assert user.is_active is False
+
+
+@pytest.mark.django_db
+def test_register_refuse_mot_de_passe_faible():
+    with pytest.raises(RegistrationError):
+        AuthService().register(**dict(VALID, password="12345678"))  # purement numérique
+
+
+@pytest.mark.django_db
+@LOCMEM
+def test_resend_invalide_les_codes_precedents():
+    svc = AuthService()
+    user = svc.register(**VALID)
+    code1 = _latest_code(user)
+    svc.resend_email_code(email=VALID["email"])
+    old = EmailVerificationCode.objects.get(user=user, code=code1)
+    assert old.consumed_at is not None  # ancien code invalidé
+    # Le nouveau code (le seul valide) active bien le compte.
+    nouveau = EmailVerificationCode.objects.filter(user=user, consumed_at__isnull=True).latest("created_at")
+    res = svc.verify_email_code(email=VALID["email"], code=nouveau.code)
+    assert res["user"].is_active is True
+
+
+@pytest.mark.django_db
+@LOCMEM
+def test_lockout_apres_max_tentatives():
+    svc = AuthService()
+    user = svc.register(**VALID)
+    for _ in range(5):  # email_code_max_attempts = 5
+        with pytest.raises(InvalidCode):
+            svc.verify_email_code(email=VALID["email"], code="000000")
+    # Code épuisé : même le bon code est désormais refusé.
+    with pytest.raises(InvalidCode):
+        svc.verify_email_code(email=VALID["email"], code=_latest_code(user))
     user.refresh_from_db()
     assert user.is_active is False
 

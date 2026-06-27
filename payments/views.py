@@ -64,5 +64,11 @@ class SandboxCallbackView(APIView):
     def post(self, request):
         s = SandboxCallbackSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        process_callback.delay("sandbox", dict(s.validated_data))
+        payload = dict(s.validated_data)
+        # Vérifie l'authenticité du callback (no-op en sandbox ; HMAC en prod).
+        from .providers import registry
+
+        if not registry.get("sandbox").verify_signature(dict(request.headers), payload):
+            return Response({"detail": "Signature invalide."}, status=status.HTTP_403_FORBIDDEN)
+        process_callback.delay("sandbox", payload)
         return Response({"detail": "Callback reçu."}, status=status.HTTP_202_ACCEPTED)

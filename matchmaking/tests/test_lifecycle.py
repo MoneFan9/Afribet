@@ -112,13 +112,17 @@ def test_resolution_victoire_regle_escrow(house):
 
 
 def test_double_resolve_idempotent(house):
+    from matchmaking.models import Match
+
     m, a, b = _active_p2p(bet=500)
     m.game_state = {"plateau": [0] * 14, "greniers": [40, 0], "current_player": 0}
     m.save(update_fields=["game_state"])
     r = MatchResolutionService()
     r.resolve(m)
     apres = _avail(a)
-    r.resolve(m)  # second appel : match déjà COMPLETED → no-op
+    # Second appel sur une instance FRAÎCHE relue en base (preuve d'idempotence DB,
+    # pas seulement de l'objet en mémoire) : resolve re-verrouille + relit le statut.
+    r.resolve(Match.objects.get(pk=m.pk))
     assert _avail(a) == apres  # aucun double règlement
 
 
@@ -216,12 +220,13 @@ def test_timer_de_coup_planifie_apres_coup(house, django_capture_on_commit_callb
     assert len(callbacks) >= 1  # planification du pire-coup-auto à expiration
 
 
-# --- CU11 : IA adaptative (mode entraînement) -----------------------------
-def test_ia_apprend_le_profil_en_entrainement(house):
-    # En vs IA virtuel (non-argent), l'IA apprend le profil adverse (§7.1).
+# --- CU11 : équité IA — pas d'adaptation dès qu'il y a un enjeu (§7.4) -----
+def test_pas_d_adaptation_ia_en_bonus(house):
+    # Le bonus a une valeur réelle latente (convertible 200:1) : l'IA ne doit PAS
+    # s'adapter (§7.4). Le profil reste donc vide.
     from games.base.service import GameService
 
-    p = _player("train")
+    p = _player("nobonus")
     WalletService().credit(p, Money(5000, XAF), TxType.BONUS_GRANT, Pocket.BONUS)
     m = MatchmakingService().create_challenge(
         creator=p, game_key="songo", opponent_type=OpponentType.AI,
@@ -230,9 +235,7 @@ def test_ia_apprend_le_profil_en_entrainement(house):
     )
     legal = GameService().legal_moves("songo", m.game_state, 0)
     m2 = MatchLifecycleService().play_move(match_id=m.id, user=p, move=legal[0])
-    if m2.status == MatchStatus.ACTIVE:  # si la partie continue, le profil est mémorisé
-        assert m2.ai_profile is not None
-        assert m2.ai_profile["total_moves"] >= 1
+    assert m2.ai_profile is None  # aucune adaptation exploitante avec enjeu
 
 
 # --- CU11 : vs IA ---------------------------------------------------------

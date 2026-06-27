@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from accounts.models import KycStatus
 from core.errors import DomainError
@@ -45,15 +45,22 @@ class PaymentService:
             if existing is not None:
                 return {"intent": existing, "instruction": "Dépôt déjà initié."}
         provider = registry.get(provider_key)
-        intent = PaymentIntent.objects.create(
-            user=user,
-            direction=Direction.IN,
-            amount=amount.amount,
-            currency=amount.currency,
-            provider_key=provider_key,
-            method=method,
-            idempotency_key=idempotency_key or uuid.uuid4().hex,
-        )
+        try:
+            intent = PaymentIntent.objects.create(
+                user=user,
+                direction=Direction.IN,
+                amount=amount.amount,
+                currency=amount.currency,
+                provider_key=provider_key,
+                method=method,
+                idempotency_key=idempotency_key or uuid.uuid4().hex,
+            )
+        except IntegrityError:
+            # Course sur la même clé d'idempotence : renvoie l'intent déjà créé.
+            existing = PaymentIntent.objects.filter(idempotency_key=idempotency_key).first()
+            if existing is not None:
+                return {"intent": existing, "instruction": "Dépôt déjà initié."}
+            raise
         instruction = provider.initiate_deposit(intent)
         intent.external_ref = instruction.get("external_ref", "")
         intent.save(update_fields=["external_ref"])

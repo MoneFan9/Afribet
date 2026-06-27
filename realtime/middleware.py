@@ -19,7 +19,8 @@ def _user_from_token(token: str):
 
     try:
         access = AccessToken(token)
-        return get_user_model().objects.get(id=access["user_id"])
+        # Revalide is_active : un compte désactivé/banni ne doit plus ouvrir de WS.
+        return get_user_model().objects.get(id=access["user_id"], is_active=True)
     except (TokenError, KeyError, get_user_model().DoesNotExist):
         return AnonymousUser()
 

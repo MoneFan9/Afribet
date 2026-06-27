@@ -34,6 +34,13 @@ User = get_user_model()
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sans I/O/0/1 (lisibilité)
 
 
+def _schedule_move_timeout(match_id: str) -> None:
+    """Planifie la tâche de timeout de coup (import paresseux : évite le cycle realtime)."""
+    from realtime.services import MoveTimerService
+
+    MoveTimerService().schedule(match_id)
+
+
 # --- Erreurs CU3-CU4 ------------------------------------------------------
 class MatchmakingError(DomainError):
     pass
@@ -99,13 +106,19 @@ class MatchmakingService:
             match.move_deadline = timezone.now() + timedelta(hours=hours)
 
     def _start(self, match: Match, second_player) -> None:
-        """Démarre un match (état initial opaque, ACTIVE, timer armé)."""
+        """Démarre un match (état initial opaque, ACTIVE, timer armé + planifié)."""
         match.player_2 = second_player
         match.game_state = self.games.init_state(match.game_key)
         match.current_player = self.games.current_player(match.game_key, match.game_state)
         match.status = MatchStatus.ACTIVE
         self._arm_deadline(match)
         match.save()
+        # Planifie le timeout du **1er coup** (sinon aucun timeout serveur au tour
+        # initial — équité CU8). Après commit ; la tâche s'auto-annule si un coup
+        # repousse l'échéance.
+        if match.timing_mode == TimingMode.REALTIME:
+            mid = str(match.id)
+            transaction.on_commit(lambda mid=mid: _schedule_move_timeout(mid))
 
     # --- CU3 : créer un défi ---------------------------------------------
     @transaction.atomic
@@ -205,25 +218,38 @@ class MatchmakingService:
 
         paired = []
         for ms in groups.values():
-            for i in range(0, len(ms) - 1, 2):
-                a, b = ms[i], ms[i + 1]
-                if self._merge(a.id, b.id):
-                    paired.append(a.id)
+            used: set = set()
+            for i in range(len(ms)):
+                if ms[i].id in used:
+                    continue
+                for j in range(i + 1, len(ms)):
+                    if ms[j].id in used:
+                        continue
+                    # Ne jamais apparier un joueur contre lui-même (deux défis du
+                    # même créateur aux mêmes paramètres).
+                    if ms[i].player_1_id == ms[j].player_1_id:
+                        continue
+                    if self._merge(ms[i].id, ms[j].id):
+                        used.add(ms[i].id)
+                        used.add(ms[j].id)
+                        paired.append(ms[i].id)
+                        break
         return paired
 
     @transaction.atomic
     def _merge(self, a_id, b_id) -> bool:
-        # Verrouillage dans un ordre stable (par id) — anti-interblocage si deux
-        # workers d'appariement tournent en parallèle.
-        first_id, second_id = sorted([a_id, b_id], key=str)
+        # Verrouillage dans un ordre stable (par id, via order_by) — anti-interblocage
+        # si deux workers d'appariement tournent en parallèle.
         locked = {
             m.id: m
-            for m in Match.objects.select_for_update().filter(id__in=[first_id, second_id])
+            for m in Match.objects.select_for_update().filter(id__in=[a_id, b_id]).order_by("id")
         }
         a = locked[a_id]
         b = locked[b_id]
         if a.status != MatchStatus.PENDING or b.status != MatchStatus.PENDING:
             return False
+        if a.player_1_id == b.player_1_id:
+            return False  # garde-fou : jamais soi-même
         pocket = pocket_for(a.stake_kind)
         bet = Money(a.bet_amount, a.currency)
         # Le créateur de b rejoint a : on libère sa mise de b puis on la verrouille dans a.

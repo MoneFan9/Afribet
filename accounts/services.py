@@ -13,6 +13,8 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -83,6 +85,12 @@ class AuthService:
             raise EmailAlreadyUsed("Cette adresse e-mail est déjà utilisée.")
         if User.objects.filter(username__iexact=username).exists():
             raise UsernameAlreadyUsed("Ce pseudo est déjà pris.")
+        # Applique les validateurs de mot de passe Django (longueur, trop commun,
+        # purement numérique...) — sinon ils sont inertes (create_user ne valide pas).
+        try:
+            validate_password(password)
+        except DjangoValidationError as exc:
+            raise RegistrationError(" ".join(exc.messages)) from exc
 
         try:
             user = User.objects.create_user(
@@ -102,13 +110,20 @@ class AuthService:
 
     # --- Code MFA e-mail --------------------------------------------------
     def _send_new_code(self, user) -> EmailVerificationCode:
+        # Invalide les codes en attente : un seul code valide à la fois (l'anti-brute-
+        # force ne peut plus être contourné en cumulant des codes).
+        EmailVerificationCode.objects.filter(user=user, consumed_at__isnull=True).update(
+            consumed_at=timezone.now()
+        )
         ttl = config.get_int("email_code_ttl_minutes")
         code = EmailVerificationCode.objects.create(
             user=user,
             code=_generate_code(),
             expires_at=timezone.now() + timedelta(minutes=ttl),
         )
-        self.notifications.send_email_code(user.email, code.code)
+        # Envoi APRÈS commit (si rollback de l'inscription, pas d'e-mail orphelin).
+        to, value = user.email, code.code
+        transaction.on_commit(lambda: self.notifications.send_email_code(to, value))
         return code
 
     def resend_email_code(self, *, email: str) -> None:

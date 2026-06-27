@@ -149,6 +149,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Anti-brute-force / anti e-mail-bombing : seules les vues portant un
+    # `throttle_scope` sont limitées (ScopedRateThrottle ignore les autres).
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": env("THROTTLE_AUTH", "10/min"),       # register/verify
+        "auth_email": env("THROTTLE_AUTH_EMAIL", "5/min"),  # login/resend (sensibles)
+    },
 }
 
 # --- Redis / Channels (temps réel, ENF7) ----------------------------------

@@ -16,6 +16,7 @@ from matchmaking.services import (
     BetOutOfBounds,
     CannotJoinOwnChallenge,
     InvalidAccessCode,
+    MatchmakingError,
     MatchmakingService,
 )
 from wallet.models import Pocket, TxType
@@ -139,6 +140,17 @@ def test_join_by_code_expire():
 
 
 # --- CU3b : appariement automatique ---------------------------------------
+def test_auto_pair_jamais_contre_soi_meme():
+    # Un même joueur crée deux défis AUTO identiques : il ne doit PAS s'affronter.
+    a = _player("solo", funds=10000)
+    m1 = _create(a)
+    m2 = _create(a)
+    paired = MatchmakingService().auto_pair()
+    assert paired == []
+    m1.refresh_from_db(); m2.refresh_from_db()
+    assert m1.status == MatchStatus.PENDING and m2.status == MatchStatus.PENDING
+
+
 def test_auto_pair_relie_deux_createurs():
     a, b = _player("pa"), _player("pb")
     ma = _create(a)
@@ -171,3 +183,28 @@ def test_regenerate_code_change_le_code():
     ancien = m.access_code
     m2 = MatchmakingService().regenerate_code(creator=a, match_id=m.id)
     assert m2.access_code != ancien
+
+
+def test_cancel_par_non_createur_refuse():
+    a, b = _player("nc_a"), _player("nc_b")
+    m = _create(a)
+    with pytest.raises(MatchmakingError):
+        MatchmakingService().cancel_challenge(creator=b, match_id=m.id)
+    m.refresh_from_db()
+    assert m.status == MatchStatus.PENDING  # inchangé
+
+
+def test_regenerate_par_non_createur_refuse():
+    a, b = _player("ng_a"), _player("ng_b")
+    m = _create(a, pairing_mode=PairingMode.INVITE_CODE)
+    with pytest.raises(MatchmakingError):
+        MatchmakingService().regenerate_code(creator=b, match_id=m.id)
+
+
+def test_code_usage_unique_rejette_seconde_jointure():
+    a, b, c = _player("u_a"), _player("u_b"), _player("u_c")
+    m = _create(a, pairing_mode=PairingMode.INVITE_CODE)
+    code = m.access_code
+    MatchmakingService().join_by_code(joiner=b, access_code=code)
+    with pytest.raises(InvalidAccessCode):
+        MatchmakingService().join_by_code(joiner=c, access_code=code)  # code déjà consommé

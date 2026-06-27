@@ -37,6 +37,8 @@ class MatchConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(self.group, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
+        from core.errors import DomainError
+
         action = content.get("action")
         user = self.scope["user"]
         try:
@@ -47,8 +49,12 @@ class MatchConsumer(AsyncJsonWebsocketConsumer):
             else:
                 await self.send_json({"type": "error", "detail": "Action inconnue."})
                 return
-        except Exception as exc:  # noqa: BLE001 - erreurs domaine → message client
+        except DomainError as exc:
+            # Seules les erreurs métier sont détaillées au client.
             await self.send_json({"type": "error", "detail": str(exc)})
+            return
+        except Exception:  # noqa: BLE001 - erreur interne : message générique (pas de fuite)
+            await self.send_json({"type": "error", "detail": "Erreur interne du serveur."})
             return
         # Diffuse le nouvel état à tout le groupe (les deux joueurs).
         await self.channel_layer.group_send(
@@ -98,8 +104,8 @@ class MatchConsumer(AsyncJsonWebsocketConsumer):
         from matchmaking.lifecycle import MatchLifecycleService
         from realtime.services import PresenceService
 
-        MatchLifecycleService().on_disconnect(match_id=self.match_id, user=user)
-        PresenceService().schedule_disconnect_timeout(self.match_id, user.id)
+        event = MatchLifecycleService().on_disconnect(match_id=self.match_id, user=user)
+        PresenceService().schedule_disconnect_timeout(self.match_id, user.id, event.id)
 
     @database_sync_to_async
     def _on_connect(self, user):

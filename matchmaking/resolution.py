@@ -25,6 +25,9 @@ class MatchResolutionService:
     @transaction.atomic
     def resolve(self, match: Match) -> Match:
         """Résout un match terminé selon son état de jeu (victoire ou nul)."""
+        # Verrou + relecture du statut : idempotence robuste même si appelé hors du
+        # verrou d'un appelant (anti double-règlement concurrent).
+        match = Match.objects.select_for_update().get(pk=match.pk)
         if match.status != MatchStatus.ACTIVE:
             return match
         winner_idx = self.games.winner(match.game_key, match.game_state)
@@ -64,6 +67,7 @@ class MatchResolutionService:
     @transaction.atomic
     def void(self, match: Match, *, reason: str = "server_fault") -> Match:
         """Annule un match et **rembourse les deux** (panne serveur, ENF2)."""
+        match = Match.objects.select_for_update().get(pk=match.pk)
         if match.status not in (MatchStatus.ACTIVE, MatchStatus.PENDING):
             return match
         if match.player_2_id is not None:
@@ -92,6 +96,7 @@ class MatchResolutionService:
 
     @transaction.atomic
     def _win_with_reason(self, match: Match, winner_idx: int, reason: str) -> Match:
+        match = Match.objects.select_for_update().get(pk=match.pk)
         if match.status != MatchStatus.ACTIVE:
             return match
         winner = match.user_for_index(winner_idx)

@@ -23,8 +23,11 @@ class MoveTimerService:
 class PresenceService:
     """Fenêtre de grâce de reconnexion (conception §8.2)."""
 
-    def schedule_disconnect_timeout(self, match_id, user_id) -> None:
+    def schedule_disconnect_timeout(self, match_id, user_id, disconnect_event_id=None) -> None:
         from matchmaking.tasks import run_disconnect_timeout
 
         grace = config.get_int("grace_seconds")
-        run_disconnect_timeout.apply_async(args=[str(match_id), str(user_id)], countdown=grace)
+        run_disconnect_timeout.apply_async(
+            args=[str(match_id), str(user_id), str(disconnect_event_id) if disconnect_event_id else None],
+            countdown=grace,
+        )

@@ -36,6 +36,14 @@ class PaymentProvider(ABC):
     def verify(self, external_ref: str) -> bool:
         """Vérification active (secours si le callback manque)."""
 
+    def verify_signature(self, headers: dict, payload: dict) -> bool:
+        """Vérifie l'authenticité d'un callback (signature/HMAC).
+
+        Défaut permissif (sandbox MVP). **Tout prestataire réel DOIT surcharger**
+        cette méthode (sinon un tiers pourrait forger un callback — ENF8, §12).
+        """
+        return True
+
 
 class PaymentGatewayRegistry:
     def __init__(self) -> None:

@@ -81,6 +81,17 @@ def test_money_mode_reproductible():
     assert mv1 == mv2  # rejouable à l'identique (auditable)
 
 
+def test_money_mode_ignore_un_profil_fourni():
+    # Preuve d'audit §7.4 : même si un profil exploitable est fourni, money_mode
+    # l'ignore totalement → coup identique à « sans profil ».
+    ai = AlphaSongoAI()
+    s = SongoModule().init_state()
+    profile = {"favored_holes": [9] * 7, "vulnerability_rate": 0.95, "total_moves": 80}
+    avec = ai.choose_move(s, 0, ALPHASONGO, money_mode=True, seed=5, iterations=80, profile=profile)
+    sans = ai.choose_move(s, 0, ALPHASONGO, money_mode=True, seed=5, iterations=80)
+    assert avec == sans
+
+
 def test_nn_money_mode_ignore_le_profil():
     # En mode argent, learn() est neutre et l'évaluation n'exploite pas le profil.
     plateau = [5] * 14

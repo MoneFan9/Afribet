@@ -49,6 +49,14 @@ def test_callback_succes_credite_le_wallet():
     assert u.transactions.filter(type=TxType.DEPOSIT).count() == 1
 
 
+def test_depot_idempotency_key_dedup():
+    u = _user("idem")
+    out1 = PaymentService().deposit(u, Money(5000, XAF), idempotency_key="k-1")
+    out2 = PaymentService().deposit(u, Money(5000, XAF), idempotency_key="k-1")
+    assert out1["intent"].id == out2["intent"].id
+    assert PaymentIntent.objects.filter(user=u, direction=Direction.IN).count() == 1
+
+
 def test_callback_idempotent():
     u = _user()
     intent = PaymentService().deposit(u, Money(5000, XAF))["intent"]

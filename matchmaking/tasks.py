@@ -16,13 +16,15 @@ def run_move_timeout(match_id: str) -> str:
 
 
 @shared_task
-def run_disconnect_timeout(match_id: str, user_id: str) -> str:
+def run_disconnect_timeout(match_id: str, user_id: str, disconnect_event_id: str | None = None) -> str:
     from django.contrib.auth import get_user_model
 
     from .lifecycle import MatchLifecycleService
 
     user = get_user_model().objects.get(id=user_id)
-    match = MatchLifecycleService().on_disconnect_timeout(match_id=match_id, user=user)
+    match = MatchLifecycleService().on_disconnect_timeout(
+        match_id=match_id, user=user, disconnect_event_id=disconnect_event_id
+    )
     return f"{match_id}:{match.status}"
 
 
