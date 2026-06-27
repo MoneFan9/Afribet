@@ -1,0 +1,5 @@
+{
+  "name": "Mancala - Jeux SONGO",
+  "description": "Une simulation complète et fidèle du jeu traditionnel Songo (Mancala d'Afrique Centrale). Inclut une IA avancée (Alpha-Beta), un mode multijoueur en ligne en temps réel, un système de tournoi et des tutoriels tactiques.",
+  "requestFramePermissions": []
+}

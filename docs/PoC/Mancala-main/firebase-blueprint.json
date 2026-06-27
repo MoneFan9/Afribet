@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "An online game room",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string" },
+        "plateau": { "type": "array", "items": { "type": "number" } },
+        "greniers": { "type": "array", "items": { "type": "number" } },
+        "joueurActuel": { "type": "number" },
+        "hostId": { "type": "string" },
+        "guestId": { "type": "string" },
+        "hostName": { "type": "string" },
+        "guestName": { "type": "string" },
+        "lastMove": { "type": "number" },
+        "movePlayer": { "type": "number" },
+        "moveCounter": { "type": "number" },
+        "syncCounter": { "type": "number" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "forfeit", "closed"] },
+        "forfeitBy": { "type": "string" },
+        "forfeitRole": { "type": "number" },
+        "latestEmoji": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "sender": { "type": "number" },
+            "timestamp": { "type": "number" }
+          }
+        }
+      },
+      "required": ["roomId", "hostId", "status"]
+    },
+    "Save": {
+      "title": "Save",
+      "description": "A user's saved game",
+      "type": "object",
+      "properties": {
+        "plateau": { "type": "array", "items": { "type": "number" } },
+        "greniers": { "type": "array", "items": { "type": "number" } },
+        "joueurActuel": { "type": "number" },
+        "mode": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "logs": { "type": "array" },
+        "statsApprenti": { "type": "object" },
+        "tournoi": { "type": "object" },
+        "history": { "type": "array" },
+        "lastMove": { "type": "number" },
+        "nomsJoueurs": { "type": "array", "items": { "type": "string" } },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["timestamp"]
+    },
+    "UserStats": {
+      "title": "UserStats",
+      "description": "User profile and game statistics",
+      "type": "object",
+      "properties": {
+        "elo": { "type": "number" },
+        "wins": { "type": "number" },
+        "losses": { "type": "number" },
+        "draws": { "type": "number" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] }
+      }
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Online multiplayer rooms"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserStats" },
+      "description": "User profiles and stats"
+    },
+    "/users/{userId}/saves/{saveId}": {
+      "schema": { "$ref": "#/entities/Save" },
+      "description": "User saved games"
+    }
+  }
+}

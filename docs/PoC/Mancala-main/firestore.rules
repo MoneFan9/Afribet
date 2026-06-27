@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: rooms
+    // Document ID: {roomId}
+    // Fields:
+    //   - roomId: string (required)
+    //   - plateau: list of numbers
+    //   - greniers: list of numbers
+    //   - joueurActuel: number
+    //   - hostId: string (required)
+    //   - guestId: string
+    //   - hostName: string
+    //   - guestName: string
+    //   - lastMove: number
+    //   - movePlayer: number
+    //   - moveCounter: number
+    //   - syncCounter: number
+    //   - status: string (required, 'waiting', 'playing', 'forfeit', 'closed')
+    //   - forfeitBy: string
+    //   - forfeitRole: number
+    //   - latestEmoji: map
+    //
+    // Collection: users/{userId}/saves
+    // Document ID: {saveId}
+    // Fields:
+    //   - plateau: list of numbers
+    //   - greniers: list of numbers
+    //   - joueurActuel: number
+    //   - mode: string
+    //   - difficulty: string
+    //   - logs: list
+    //   - statsApprenti: map
+    //   - tournoi: map
+    //   - history: list
+    //   - lastMove: number
+    //   - nomsJoueurs: list of strings
+    //   - timestamp: number (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "onebanglevy@gmail.com" || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isValidRoom(data) {
+      return data.roomId is string && data.roomId.size() > 0 && data.roomId.size() <= 20 &&
+             data.hostId is string && data.hostId.size() > 0 && data.hostId.size() <= 50 &&
+             data.status in ['waiting', 'playing', 'forfeit', 'closed'] &&
+             (!('hostName' in data) || data.hostName == null || (data.hostName is string && data.hostName.size() <= 50)) &&
+             (!('guestName' in data) || data.guestName == null || (data.guestName is string && data.guestName.size() <= 50)) &&
+             (!('guestId' in data) || data.guestId == null || (data.guestId is string && data.guestId.size() <= 50)) &&
+             (!('plateau' in data) || (data.plateau is list && data.plateau.size() <= 14)) &&
+             (!('greniers' in data) || (data.greniers is list && data.greniers.size() <= 2)) &&
+             (!('tournoi' in data) || data.tournoi is map);
+    }
+
+    function isValidSave(data) {
+      return data.timestamp is number &&
+             (!('plateau' in data) || (data.plateau is list && data.plateau.size() <= 14)) &&
+             (!('greniers' in data) || (data.greniers is list && data.greniers.size() <= 2)) &&
+             (!('logs' in data) || (data.logs is list && data.logs.size() <= 100)) &&
+             (!('history' in data) || (data.history is list && data.history.size() <= 200));
+    }
+
+    function isValidUserStats(data) {
+      return (!('elo' in data) || (data.elo is number && data.elo >= 0 && data.elo <= 5000)) &&
+             (!('wins' in data) || (data.wins is number && data.wins >= 0)) &&
+             (!('losses' in data) || (data.losses is number && data.losses >= 0)) &&
+             (!('draws' in data) || (data.draws is number && data.draws >= 0)) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100)) &&
+             (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 500)) &&
+             (!('role' in data) || data.role in ['user', 'admin']);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && 
+                    isValidUserStats(request.resource.data) &&
+                    (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow update: if isOwner(userId) && 
+                    isValidUserStats(request.resource.data) &&
+                    (!('role' in request.resource.data) || request.resource.data.role == resource.data.get('role', 'user') || isAdmin());
+      allow delete: if isAdmin();
+
+      match /saves/{saveId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasRequiredFields(['timestamp']) && isValidSave(request.resource.data);
+        allow update: if isOwner(userId) && isValidSave(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /rooms/{roomId} {
+      allow get: if isAuthenticated() && (resource.data.hostId == request.auth.uid || resource.data.guestId == request.auth.uid || resource.data.status == 'waiting');
+      allow list: if isAuthenticated() && (resource.data.hostId == request.auth.uid || resource.data.guestId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && 
+                    hasRequiredFields(['roomId', 'hostId', 'status']) && 
+                    isValidRoom(request.resource.data) &&
+                    request.resource.data.hostId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                    isValidRoom(request.resource.data) &&
+                    request.resource.data.hostId == resource.data.hostId && // Immutable hostId
+                    (
+                      isAdmin() ||
+                      // Guest can join if waiting
+                      (resource.data.status == 'waiting' && request.resource.data.status == 'playing' && request.resource.data.guestId == request.auth.uid) ||
+                      // Host or Guest can update non-game-state fields (ping, emoji, forfeit)
+                      (
+                        (resource.data.hostId == request.auth.uid || resource.data.guestId == request.auth.uid) &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostPing', 'guestPing', 'latestEmoji', 'status', 'forfeitBy', 'forfeitRole'])
+                      )
+                    );
+      allow delete: if isAdmin();
+    }
+  }
+}

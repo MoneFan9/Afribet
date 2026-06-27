@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.git/
+.pytest_cache/
+.ruff_cache/
+db.sqlite3
+.env
+docs/PoC/Mancala-main/node_modules/
+node_modules/
+staticfiles/
+media/
