@@ -22,6 +22,7 @@ from .serializers import (
     JoinByCodeSerializer,
     MatchSerializer,
     PlayMoveSerializer,
+    TrainingSerializer,
 )
 from .services import MatchmakingService
 
@@ -43,6 +44,21 @@ class ChallengeView(APIView):
         bet = Money(data.pop("bet_amount"), settings.DEFAULT_CURRENCY)
         try:
             match = MatchmakingService().create_challenge(creator=request.user, bet_amount=bet, **data)
+        except DomainError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(MatchSerializer(match).data, status=status.HTTP_201_CREATED)
+
+
+class TrainingView(APIView):
+    """Démarrer un entraînement vs IA sans enjeu (EF12 ; route front /train)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        s = TrainingSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        try:
+            match = MatchmakingService().create_training_match(creator=request.user, **s.validated_data)
         except DomainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(MatchSerializer(match).data, status=status.HTTP_201_CREATED)

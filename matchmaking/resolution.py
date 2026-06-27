@@ -31,9 +31,21 @@ class MatchResolutionService:
         if match.status != MatchStatus.ACTIVE:
             return match
         winner_idx = self.games.winner(match.game_key, match.game_state)
+        if match.is_training:
+            return self._finalize_training(match, winner_idx, EndReason.WIN if winner_idx is not None else EndReason.DRAW)
         if winner_idx is None:
             return self._draw(match)
         return self._win(match, winner_idx)
+
+    # --- Entraînement (EF12) : clôture SANS aucun mouvement financier ------
+    def _finalize_training(self, match: Match, winner_idx, reason: str) -> Match:
+        if winner_idx is not None:
+            match.winner = match.user_for_index(winner_idx)
+        match.status = MatchStatus.COMPLETED
+        match.end_reason = reason
+        match.save(update_fields=["winner", "status", "end_reason"])
+        self._event(match, EventType.RESOLVE, {"training": True, "reason": reason})
+        return match
 
     # --- Victoire ---------------------------------------------------------
     def _win(self, match: Match, winner_idx: int) -> Match:
@@ -70,6 +82,13 @@ class MatchResolutionService:
         match = Match.objects.select_for_update().get(pk=match.pk)
         if match.status not in (MatchStatus.ACTIVE, MatchStatus.PENDING):
             return match
+        if match.is_training:
+            # Entraînement : rien à rembourser, on annule simplement.
+            match.status = MatchStatus.CANCELLED
+            match.end_reason = EndReason.VOID
+            match.save(update_fields=["status", "end_reason"])
+            self._event(match, EventType.VOID, {"reason": reason, "training": True})
+            return match
         if match.player_2_id is not None:
             self._refund_both(match)
         else:
@@ -95,6 +114,8 @@ class MatchResolutionService:
         match = Match.objects.select_for_update().get(pk=match.pk)
         if match.status != MatchStatus.ACTIVE:
             return match
+        if match.is_training:  # forfait/déco en entraînement : pas de règlement
+            return self._finalize_training(match, winner_idx, reason)
         winner = match.user_for_index(winner_idx)
         loser = match.user_for_index(1 - winner_idx)
         stake = Money(match.bet_amount, match.currency)

@@ -66,6 +66,9 @@ class Match(models.Model):
     access_code = models.CharField(max_length=16, null=True, blank=True, unique=True)
     access_code_expires_at = models.DateTimeField(null=True, blank=True)
     stake_kind = models.CharField(max_length=8, choices=StakeKind.choices)
+    # Match d'entraînement (EF12 « sans enjeu ») : aucun escrow, aucune Transaction,
+    # ni rake ni Elo ; l'IA y est **adaptative** (mode non-argent, §7.4).
+    is_training = models.BooleanField(default=False)
     bet_amount = models.DecimalField(max_digits=20, decimal_places=2)
     currency = models.CharField(max_length=8, default="XAF")
     game_state = models.JSONField(null=True, blank=True)  # état opaque du jeu

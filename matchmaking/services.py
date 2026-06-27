@@ -160,6 +160,33 @@ class MatchmakingService:
         # AUTO humain : reste PENDING, listé au lobby + file d'appariement.
         return match
 
+    # --- CU11 / EF12 : entraînement vs IA (sans enjeu) -------------------
+    @transaction.atomic
+    def create_training_match(
+        self, *, creator, game_key: str = "songo", ai_level: str = "",
+        timing_mode: str = TimingMode.REALTIME,
+    ) -> Match:
+        """Match d'entraînement vs IA **sans mise** : aucun escrow, IA adaptative.
+
+        Accessible sans solde ni KYC (cf. CU1 « accès limité → jouer en virtuel oui »).
+        """
+        if not game_registry.has(game_key):
+            raise GameNotRegistered(f"Jeu non enregistré : {game_key!r}")
+        house = get_house()  # identité système jouant l'IA (aucun mouvement financier)
+        match = Match.objects.create(
+            game_key=game_key,
+            opponent_type=OpponentType.AI,
+            timing_mode=timing_mode,
+            pairing_mode=PairingMode.AUTO,
+            stake_kind=StakeKind.REAL,  # ignoré (is_training) — pas d'escrow
+            is_training=True,
+            bet_amount=0,
+            player_1=creator,
+            ai_level=ai_level or config.get_str("default_ai_level"),
+        )
+        self._start(match, house)  # ACTIVE + état initial + timer (équité conservée)
+        return match
+
     # --- CU4 : rejoindre depuis le lobby ---------------------------------
     @transaction.atomic
     def join_from_lobby(self, *, joiner, match_id) -> Match:

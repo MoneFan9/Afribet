@@ -95,7 +95,9 @@ class MatchLifecycleService:
         (§7.4). Comme tout match actuel comporte une mise, l'adaptation reste dormante
         jusqu'à l'ajout d'un mode entraînement sans escrow.
         """
-        money_mode = match.stake_kind in (StakeKind.REAL, StakeKind.BONUS)
+        # Enjeu (réel OU bonus) ⇒ pas d'adaptation (§7.4). Entraînement sans enjeu
+        # (EF12) ⇒ adaptation autorisée : c'est le point d'entrée du NN adaptatif.
+        money_mode = (not match.is_training) and match.stake_kind in (StakeKind.REAL, StakeKind.BONUS)
         training = not money_mode
         if training and human_move is not None and pre_state is not None and human_idx is not None:
             match.ai_profile = self.games.observe_opponent_move(

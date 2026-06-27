@@ -20,6 +20,12 @@ class JoinByCodeSerializer(serializers.Serializer):
     access_code = serializers.CharField(max_length=16)
 
 
+class TrainingSerializer(serializers.Serializer):
+    game_key = serializers.CharField(max_length=32, default="songo")
+    ai_level = serializers.CharField(max_length=16, required=False, allow_blank=True, default="")
+    timing_mode = serializers.ChoiceField(choices=TimingMode.choices, default=TimingMode.REALTIME)
+
+
 class PlayMoveSerializer(serializers.Serializer):
     move = serializers.IntegerField()
 
@@ -29,7 +35,7 @@ class MatchSerializer(serializers.ModelSerializer):
         model = Match
         fields = [
             "id", "game_key", "opponent_type", "timing_mode", "pairing_mode",
-            "stake_kind", "bet_amount", "currency", "status", "current_player",
+            "stake_kind", "is_training", "bet_amount", "currency", "status", "current_player",
             "ai_level", "rake_amount", "end_reason", "access_code", "game_state",
             "player_1", "player_2", "winner", "created_at",
         ]

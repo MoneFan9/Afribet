@@ -13,12 +13,14 @@ from .views import (
     MatchDetailView,
     PlayView,
     RegenerateCodeView,
+    TrainingView,
 )
 
 app_name = "matchmaking"
 
 urlpatterns = [
     path("challenges/", ChallengeView.as_view(), name="challenge-create"),
+    path("training/", TrainingView.as_view(), name="training"),
     path("lobby/", LobbyView.as_view(), name="lobby"),
     path("join-by-code/", JoinByCodeView.as_view(), name="join-by-code"),
     path("<uuid:match_id>/", MatchDetailView.as_view(), name="detail"),
