@@ -37,6 +37,10 @@ DEFAULTS: dict[str, object] = {
     # Maison (contrepartie vs IA, conception §7.3)
     "house_initial_bankroll": 1_000_000_000,  # liquidité initiale de la Maison    # TODO confirmer
     "default_ai_level": "ALPHASONGO",     # niveau IA par défaut (pro/légende, §7.3)
+    # Conformité & jeu responsable (conception §13/§14, EF16/EF17 — Phase 8)
+    "default_jurisdiction": "",           # code pays par défaut ("" = aucune, permissif)
+    "rg_limit_increase_cooldown_hours": 24,  # délai de réflexion avant hausse de limite
+    "withdrawal_review_threshold": 0,     # retrait > seuil → revue admin (0 = désactivé)
     # Classement (conception §15, [DÉFAUT])
     "elo_base": 1200,
     "elo_k": 32,

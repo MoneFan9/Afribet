@@ -7,10 +7,12 @@ crédite qu'une fois (ENF8).
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from django.db import IntegrityError, transaction
 
 from accounts.models import KycStatus
+from core import config
 from core.errors import DomainError
 from core.money import Money
 from wallet.models import Transaction, TxStatus, TxType
@@ -39,6 +41,12 @@ class PaymentService:
     ) -> dict:
         if not amount.is_positive:
             raise PaymentError("Le montant du dépôt doit être positif.")
+        # Conformité (permissif par défaut) : auto-exclusion + limites de dépôt.
+        from compliance.services import ComplianceService
+
+        compliance = ComplianceService()
+        compliance.is_allowed(user, "deposit")
+        compliance.enforce_limits(user, "deposit", amount)
         # Idempotence requête : une re-soumission avec la même clé renvoie l'intent existant.
         if idempotency_key:
             existing = PaymentIntent.objects.filter(idempotency_key=idempotency_key).first()
@@ -72,6 +80,12 @@ class PaymentService:
             raise KycRequired("Le retrait nécessite un KYC validé.")
         if not amount.is_positive:
             raise PaymentError("Le montant du retrait doit être positif.")
+        from compliance.services import ComplianceService
+
+        ComplianceService().is_allowed(user, "withdraw")
+        # Retrait au-dessus du seuil → marqué pour revue admin (§13).
+        threshold = config.get("withdrawal_review_threshold")
+        needs_review = bool(threshold) and amount.amount > Decimal(str(threshold))
         provider = registry.get(provider_key)
         with transaction.atomic():
             intent = PaymentIntent.objects.create(
@@ -82,6 +96,7 @@ class PaymentService:
                 provider_key=provider_key,
                 destination=destination,
                 idempotency_key=uuid.uuid4().hex,
+                needs_review=needs_review,
             )
             # Réserve immédiatement le montant (débit available, tx WITHDRAWAL PENDING).
             self.wallet.reserve_for_payout(user, amount, reference=str(intent.id))

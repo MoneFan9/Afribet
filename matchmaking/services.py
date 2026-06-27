@@ -79,6 +79,11 @@ class MatchmakingService:
     def _validate(self, game_key: str, bet: Money) -> None:
         if not game_registry.has(game_key):
             raise GameNotRegistered(f"Jeu non enregistré : {game_key!r}")
+        # Jeu désactivé depuis le hub admin (§13) — permissif si non configuré.
+        from backoffice.models import GameSetting
+
+        if not GameSetting.is_enabled(game_key):
+            raise GameNotRegistered(f"Jeu désactivé : {game_key!r}")
         bet_min = config.get_int("bet_min")
         bet_max = config.get_int("bet_max")
         if not (bet_min <= bet.amount <= bet_max):
@@ -131,6 +136,13 @@ class MatchmakingService:
         ai_level: str = "",
     ) -> Match:
         self._validate(game_key, bet_amount)
+        # Conformité (permissif par défaut) : auto-exclusion, juridiction, limites.
+        from compliance.services import ComplianceService
+
+        compliance = ComplianceService()
+        action = "bet_vs_ai" if opponent_type == OpponentType.AI else "bet"
+        compliance.is_allowed(creator, action)
+        compliance.enforce_limits(creator, "bet", bet_amount)
         pocket = pocket_for(stake_kind)
 
         match = Match.objects.create(
@@ -224,6 +236,12 @@ class MatchmakingService:
             raise MatchNotJoinable("Ce défi n'attend pas d'humain.")
         if joiner.id == match.player_1_id:
             raise CannotJoinOwnChallenge("On ne rejoint pas son propre défi.")
+        # Conformité du joueur qui rejoint (permissif par défaut).
+        from compliance.services import ComplianceService
+
+        compliance = ComplianceService()
+        compliance.is_allowed(joiner, "bet")
+        compliance.enforce_limits(joiner, "bet", Money(match.bet_amount, match.currency))
 
     # --- CU3b : appariement automatique (worker) -------------------------
     def auto_pair(self) -> list:

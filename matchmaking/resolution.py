@@ -55,6 +55,7 @@ class MatchResolutionService:
         res = self.wallet.settle_escrow(
             match_id=match.id, winner=winner, loser=loser, stake=stake,
             pocket=pocket_for(match.stake_kind), house=get_house(),
+            rake_rate=self._rake_rate(match),
         )
         match.winner = winner
         match.rake_amount = res["rake"].amount
@@ -122,6 +123,7 @@ class MatchResolutionService:
         res = self.wallet.settle_escrow(
             match_id=match.id, winner=winner, loser=loser, stake=stake,
             pocket=pocket_for(match.stake_kind), house=get_house(),
+            rake_rate=self._rake_rate(match),
         )
         match.winner = winner
         match.rake_amount = res["rake"].amount
@@ -132,6 +134,13 @@ class MatchResolutionService:
         return match
 
     # --- Internes ---------------------------------------------------------
+    @staticmethod
+    def _rake_rate(match: Match):
+        """Taux de rake borné par la juridiction du créateur (§14). Défaut : config."""
+        from compliance.services import ComplianceService
+
+        return ComplianceService().effective_rake_rate(match.player_1)
+
     def _refund_both(self, match: Match) -> None:
         stake = Money(match.bet_amount, match.currency)
         self.wallet.refund_escrow(

@@ -107,3 +107,18 @@ class Transaction(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.type} {self.amount} {self.currency} [{self.pocket}]"
+
+    def save(self, *args, **kwargs):
+        # Registre immuable (ENF1) : une Transaction ne se modifie pas après écriture.
+        # (Les transitions de statut PENDING→SETTLED/FAILED passent volontairement par
+        # QuerySet.update, qui contourne save().)
+        if not self._state.adding:
+            from core.errors import WalletError
+
+            raise WalletError("Transaction immuable : modification interdite.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from core.errors import WalletError
+
+        raise WalletError("Transaction immuable : suppression interdite.")

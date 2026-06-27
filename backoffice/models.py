@@ -37,3 +37,34 @@ class PlatformConfig(models.Model):
             _, was_created = cls.objects.get_or_create(key=key, defaults={"value": value})
             created += int(was_created)
         return created
+
+
+class GameSetting(models.Model):
+    """Activation d'un jeu depuis le hub (§13 « Jeux »). Absent = activé (permissif)."""
+
+    game_key = models.CharField(max_length=32, primary_key=True)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "backoffice_game_setting"
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.game_key}: {'on' if self.enabled else 'off'}"
+
+    @classmethod
+    def is_enabled(cls, game_key: str) -> bool:
+        row = cls.objects.filter(game_key=game_key).first()
+        return True if row is None else row.enabled
+
+
+class ProviderSetting(models.Model):
+    """Activation d'un prestataire de paiement (§13 « Paiements »). Ossature."""
+
+    provider_key = models.CharField(max_length=32, primary_key=True)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "backoffice_provider_setting"
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.provider_key}: {'on' if self.enabled else 'off'}"

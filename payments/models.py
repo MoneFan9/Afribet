@@ -38,6 +38,8 @@ class PaymentIntent(models.Model):
     idempotency_key = models.CharField(max_length=128, unique=True)
     status = models.CharField(max_length=10, choices=IntentStatus.choices, default=IntentStatus.PENDING)
     destination = models.CharField(max_length=128, blank=True, default="")  # retrait
+    # Retrait au-dessus du seuil → revue humaine avant exécution (§13, CU10).
+    needs_review = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
