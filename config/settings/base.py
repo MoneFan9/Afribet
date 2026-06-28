@@ -157,6 +157,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": env("THROTTLE_AUTH", "10/min"),       # register/verify
         "auth_email": env("THROTTLE_AUTH_EMAIL", "5/min"),  # login/resend (sensibles)
+        "convert": env("THROTTLE_CONVERT", "10/min"),  # conversion virtuel→réel
     },
 }
 

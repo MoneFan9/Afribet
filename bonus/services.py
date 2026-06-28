@@ -9,16 +9,15 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta
-from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import KycStatus
 from core import config
 from core.money import Money
-from wallet.models import Pocket, Transaction, TxType
+from wallet.models import Pocket, TxType, Wallet
 from wallet.services import WalletService
 
 from .errors import (
@@ -27,7 +26,7 @@ from .errors import (
     KycRequired,
     VirtualUsageExceeded,
 )
-from .models import BonusGrant, BonusType, VirtualUsagePolicy
+from .models import BonusConversionCounter, BonusGrant, BonusType, VirtualUsagePolicy
 
 
 class BonusService:
@@ -80,7 +79,11 @@ class BonusService:
             start, end = time(sh, sm), time(eh, em)
         except (ValueError, TypeError):
             return True  # spec mal formée → permissif
-        return start <= now.time() <= end
+        t = now.time()
+        if start <= end:
+            return start <= t <= end
+        # Plage chevauchant minuit (ex. 22:00-06:00).
+        return t >= start or t <= end
 
     def check_virtual_usage(self, user) -> None:
         """Applique la `VirtualUsagePolicy` avant un défi en poche BONUS."""
@@ -112,10 +115,16 @@ class BonusService:
         threshold = config.get_int("bonus_conversion_threshold")
         per_tranche = config.get_int("bonus_conversion_real_per_tranche")
         cap = config.get_int("bonus_global_conversion_cap")
+        if threshold <= 0:
+            raise ConversionBelowThreshold("Seuil de conversion non configuré.")
 
         with transaction.atomic():
-            wallet = self.wallet.ensure_wallet(user)
-            wallet.refresh_from_db()
+            # Point de sérialisation GLOBAL : on verrouille le compteur d'exposition
+            # avant toute lecture/vérification → pas de TOCTOU sur le plafond (anti
+            # dépassement par conversions concurrentes de joueurs différents).
+            BonusConversionCounter.objects.get_or_create(id=1)
+            counter = BonusConversionCounter.objects.select_for_update().get(id=1)
+            wallet = Wallet.objects.select_for_update().get(user=user)
             bonus_avail = wallet.bonus_available
             n = int(bonus_avail // threshold)
             if n < 1:
@@ -124,13 +133,11 @@ class BonusService:
                 )
             bonus_amount = Money(n * threshold, wallet.currency)
             real_amount = Money(n * per_tranche, wallet.currency)
-            if cap:
-                already = Transaction.objects.filter(
-                    type=TxType.BONUS_CONVERSION, pocket=Pocket.REAL
-                ).aggregate(s=Sum("amount"))["s"] or Decimal("0")
-                if already + real_amount.amount > cap:
-                    raise GlobalCapReached("Plafond global de conversion atteint.")
+            if cap and counter.total_converted_real + real_amount.amount > cap:
+                raise GlobalCapReached("Plafond global de conversion atteint.")
             self.wallet.convert_bonus(user, bonus_amount, real_amount)
+            counter.total_converted_real += real_amount.amount
+            counter.save(update_fields=["total_converted_real"])
             # Clôture à vie si la poche virtuelle retombe à zéro (§16).
             wallet.refresh_from_db()
             if wallet.bonus_available == 0 and wallet.bonus_locked == 0:

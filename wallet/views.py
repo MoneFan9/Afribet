@@ -28,6 +28,7 @@ class ConvertView(APIView):
     """Conversion virtuel→réel par tranches entières, sous KYC (CU17)."""
 
     permission_classes = [IsAuthenticated]
+    throttle_scope = "convert"
 
     def post(self, request):
         from bonus.services import BonusService

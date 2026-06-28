@@ -31,6 +31,18 @@ class BonusGrant(models.Model):
         constraints = [models.UniqueConstraint(fields=["user", "type"], name="uniq_bonus_per_user_type")]
 
 
+class BonusConversionCounter(models.Model):
+    """Compteur global (singleton, pk=1) de réel converti — **point de sérialisation**
+    du plafond d'exposition (§16). Verrouillé en `select_for_update` à chaque conversion.
+    """
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    total_converted_real = models.DecimalField(max_digits=24, decimal_places=2, default=0)
+
+    class Meta:
+        db_table = "bonus_conversion_counter"
+
+
 class VirtualUsagePolicy(models.Model):
     """Bridage de l'usage virtuel (EF5d). Une ligne `active` ; éditable depuis le hub."""
 

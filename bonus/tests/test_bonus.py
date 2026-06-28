@@ -109,6 +109,14 @@ def test_within_hours():
     assert BonusService._within_hours(now, "") is True  # permissif
 
 
+def test_within_hours_plage_de_nuit():
+    # Plage chevauchant minuit (22:00-06:00).
+    minuit2 = timezone.now().replace(hour=2, minute=0)
+    midi = timezone.now().replace(hour=12, minute=0)
+    assert BonusService._within_hours(minuit2, "22:00-06:00") is True   # 02h dans la plage
+    assert BonusService._within_hours(midi, "22:00-06:00") is False     # 12h hors plage
+
+
 # --- CU17 : conversion virtuel → réel -------------------------------------
 def test_conversion_par_tranches():
     u = _user("cv", kyc=KycStatus.VERIFIED)
@@ -140,6 +148,27 @@ def test_conversion_plafond_global():
     WalletService().credit(u, Money(6_000_000, XAF), TxType.BONUS_GRANT, Pocket.BONUS)  # → 30k réel > cap
     with pytest.raises(GlobalCapReached):
         BonusService().convert_bonus_to_real(u)
+
+
+def test_conversion_plafond_limite_exacte_autorisee():
+    # already + real == cap doit PASSER (seul > cap refuse).
+    PlatformConfig.objects.create(key="bonus_global_conversion_cap", value=30_000)
+    u = _user("cl", kyc=KycStatus.VERIFIED)
+    WalletService().credit(u, Money(6_000_000, XAF), TxType.BONUS_GRANT, Pocket.BONUS)  # → 30k pile
+    res = BonusService().convert_bonus_to_real(u)
+    assert res["real_credited"] == 30_000  # accepté à la limite
+
+
+def test_poche_close_bloque_un_nouvel_octroi():
+    u = _user("pc", kyc=KycStatus.VERIFIED)
+    WalletService().credit(u, Money(4_000_000, XAF), TxType.BONUS_GRANT, Pocket.BONUS)
+    BonusService().convert_bonus_to_real(u)  # vide la poche → close
+    w = WalletService().ensure_wallet(u); w.refresh_from_db()
+    assert w.bonus_pocket_closed is True
+    # un nouveau « 1er dépôt » ne ré-octroie pas (poche close à vie)
+    assert BonusService().maybe_grant_welcome(u, _intent(5000)) is None
+    w.refresh_from_db()
+    assert w.bonus_available == 0
 
 
 def test_conversion_ferme_la_poche_a_zero():

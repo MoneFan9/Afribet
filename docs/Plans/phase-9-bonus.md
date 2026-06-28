@@ -60,6 +60,23 @@ atomique · sous seuil → refus · KYC requis · plafond global → refus · cl
 ## F. Migrations
 `bonus/0001` (BonusGrant, VirtualUsagePolicy). Aucun cycle de FK.
 
+## Post-audit Phase 9 (5 agents) — livré vs reporté
+**Corrigé après audit** : plafond global **réellement sérialisé** via `BonusConversionCounter`
+(verrou `select_for_update`, plus de TOCTOU inter-joueurs) ; `_within_hours` gère les plages
+**chevauchant minuit** ; garde `threshold<=0` ; `ConvertView` throttlé (scope `convert`).
+
+**Reporté / ossature (NON appliqué — à ne pas considérer comme complet)** :
+- **Expiration du bonus** : `expires_at`/`bonus_expiry_days` **écrits mais non consommés** (aucune
+  purge/refus sur expiration). Défaut 0 (pas d'expiration) → inerte. → tâche Celery de purge post-MVP.
+- **Clôture « à vie » par épuisement EN JEU** : `bonus_pocket_closed` n'est posé qu'à la conversion ;
+  une poche vidée par des défaites bonus reste `closed=False` (sans impact financier : le re-octroi
+  est de toute façon bloqué par la contrainte unique). → poser le drapeau au débit wallet, post-MVP.
+- **Farming bonus vs IA** : un joueur fort peut gagner du bonus contre la Maison puis convertir ;
+  **borné** par ratio 200:1 + plafond global (désormais sérialisé) + `VirtualUsagePolicy` + financement
+  prudent de la poche bonus Maison. À surveiller (anti-collusion post-MVP, §12).
+- **TOCTOU résiduel** : sous SQLite (tests) `select_for_update` est inerte ; la sérialisation du
+  compteur n'est réellement effective que sous PostgreSQL (prod). Tests de concurrence réels = backlog.
+
 ## Auto-audit — [AJUSTÉ] / reporté
 - Usage virtuel dérivé de `Match` (pas de table d'usage) — simplification assumée.
 - Elo des matchs bonus « ne comptent pas » → N/A (ranking = it. 3).
