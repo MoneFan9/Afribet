@@ -10,4 +10,5 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),  # CU1, EF2
     path("api/payments/", include("payments.urls")),  # CU2, CU7
     path("api/matches/", include("matchmaking.urls")),  # CU3-CU8
+    path("api/wallet/", include("wallet.urls")),  # EF5, CU17
 ]

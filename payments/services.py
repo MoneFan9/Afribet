@@ -211,11 +211,14 @@ class PaymentService:
 def _maybe_grant_welcome_bonus(intent: PaymentIntent) -> None:
     """Hook : octroi du bonus de bienvenue au 1er dépôt confirmé (CU16).
 
-    Implémenté en Phase 9 (`bonus.services`). Importé paresseusement pour ne pas
-    coupler `payments` à `bonus` tant que l'app n'est pas active.
+    **Isolé** : un échec de l'octroi ne doit jamais casser le règlement du dépôt
+    (le crédit réel est déjà acquis). Importé paresseusement (frontière payments↔bonus).
     """
+    import logging
+
     try:
         from bonus.services import BonusService
-    except Exception:  # noqa: BLE001 - bonus pas encore branché
-        return
-    BonusService().maybe_grant_welcome(intent.user, intent)
+
+        BonusService().maybe_grant_welcome(intent.user, intent)
+    except Exception:  # noqa: BLE001 - octroi best-effort, jamais bloquant pour le dépôt
+        logging.getLogger(__name__).exception("Octroi du bonus de bienvenue échoué (%s)", intent.id)

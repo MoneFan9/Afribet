@@ -197,6 +197,26 @@ class WalletService:
             status=TxStatus.PENDING, reference=reference,
         )
 
+    # --- Conversion virtuel → réel (CU17) --------------------------------
+    @transaction.atomic
+    def convert_bonus(self, user, bonus_amount: Money, real_amount: Money) -> Wallet:
+        """`bonus_available → available_balance` (tranches déjà calculées par BonusService).
+
+        Atomique, sous verrou : débit poche BONUS, crédit poche RÉELLE, deux
+        `Transaction(BONUS_CONVERSION)`. Crée la dette réelle à provisionner.
+        """
+        wallet = Wallet.objects.select_for_update().get(user=user)
+        if wallet.bonus_available < bonus_amount.amount:
+            raise InsufficientFunds("Solde bonus insuffisant pour la conversion.")
+        new_bonus = self._add(wallet, "bonus_available", -bonus_amount)
+        new_real = self._add(wallet, "available_balance", real_amount)
+        wallet.save()
+        self._write_tx(wallet, TxType.BONUS_CONVERSION, Pocket.BONUS, -bonus_amount, new_bonus,
+                       reference="bonus-conversion")
+        self._write_tx(wallet, TxType.BONUS_CONVERSION, Pocket.REAL, real_amount, new_real,
+                       reference="bonus-conversion")
+        return wallet
+
     @transaction.atomic
     def credit_back(self, user, amount: Money, *, reference: str = "") -> Transaction:
         """Re-crédite la poche réelle après un payout échoué (CU7)."""

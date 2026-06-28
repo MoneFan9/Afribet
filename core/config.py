@@ -34,6 +34,11 @@ DEFAULTS: dict[str, object] = {
     "bonus_conversion_threshold": 2_000_000,   # seuil d'une tranche (virtuel)
     "bonus_conversion_real_per_tranche": 10_000,  # réel crédité par tranche (ratio 200:1)
     "bonus_global_conversion_cap": 50_000_000,  # backstop d'exposition (réel)   # TODO confirmer
+    "bonus_expiry_days": 0,               # expiration du bonus (0 = pas d'expiration)
+    # Bridage de l'usage virtuel (EF5d) — défauts permissifs
+    "virtual_max_matches_per_day": 20,    # 0 = illimité
+    "virtual_cooldown_seconds": 0,        # délai mini entre deux parties virtuelles
+    "virtual_allowed_hours": "",          # ex. "08:00-23:00" ; "" = toutes heures
     # Maison (contrepartie vs IA, conception §7.3)
     "house_initial_bankroll": 1_000_000_000,  # liquidité initiale de la Maison    # TODO confirmer
     "default_ai_level": "ALPHASONGO",     # niveau IA par défaut (pro/légende, §7.3)

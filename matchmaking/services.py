@@ -143,6 +143,11 @@ class MatchmakingService:
         action = "bet_vs_ai" if opponent_type == OpponentType.AI else "bet"
         compliance.is_allowed(creator, action)
         compliance.enforce_limits(creator, "bet", bet_amount)
+        # Bridage de l'usage virtuel (EF5d) si défi en poche bonus.
+        if stake_kind == StakeKind.BONUS:
+            from bonus.services import BonusService
+
+            BonusService().check_virtual_usage(creator)
         pocket = pocket_for(stake_kind)
 
         match = Match.objects.create(
@@ -242,6 +247,10 @@ class MatchmakingService:
         compliance = ComplianceService()
         compliance.is_allowed(joiner, "bet")
         compliance.enforce_limits(joiner, "bet", Money(match.bet_amount, match.currency))
+        if match.stake_kind == StakeKind.BONUS:
+            from bonus.services import BonusService
+
+            BonusService().check_virtual_usage(joiner)
 
     # --- CU3b : appariement automatique (worker) -------------------------
     def auto_pair(self) -> list:
