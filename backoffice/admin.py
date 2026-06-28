@@ -27,6 +27,24 @@ class ReadOnlyAdmin(admin.ModelAdmin):
         return False
 
 
+class ActionOnlyAdmin(admin.ModelAdmin):
+    """Champs en lecture seule (aucune édition manuelle) MAIS actions autorisées.
+
+    On conserve `has_change_permission=True` : sinon Django masque le menu d'actions
+    (un changelist sans droit de modification est purement consultatif). Les seules
+    mutations passent donc par les actions, qui délèguent aux services.
+    """
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Transaction)
 class TransactionAdmin(ReadOnlyAdmin):
     """Registre **immuable** : strictement consultable (ENF1)."""
@@ -44,14 +62,11 @@ class WalletAdmin(ReadOnlyAdmin):
 
 
 @admin.register(PaymentIntent)
-class PaymentIntentAdmin(admin.ModelAdmin):
+class PaymentIntentAdmin(ActionOnlyAdmin):
     list_display = ("created_at", "user", "direction", "amount", "status", "needs_review", "provider_key")
     list_filter = ("direction", "status", "needs_review", "provider_key")
     search_fields = ("user__username", "external_ref")
-    actions = ["approve_review"]
-
-    readonly_fields = ("user", "direction", "amount", "currency", "provider_key",
-                       "method", "external_ref", "idempotency_key", "destination")
+    actions = ["approve_review", "reject_review"]
 
     @admin.action(description="Valider le retrait en revue (initie le payout)")
     def approve_review(self, request, queryset):
@@ -64,15 +79,20 @@ class PaymentIntentAdmin(admin.ModelAdmin):
             n += 1
         self.message_user(request, f"{n} retrait(s) validé(s) et initié(s).", messages.SUCCESS)
 
-    def has_add_permission(self, request):
-        return False
+    @admin.action(description="Rejeter le retrait en revue (rembourse la réservation)")
+    def reject_review(self, request, queryset):
+        from payments.services import PaymentService
 
-    def has_change_permission(self, request, obj=None):
-        return False  # lecture seule sauf l'action de validation
+        svc = PaymentService()
+        n = 0
+        for intent in queryset.filter(needs_review=True, status=IntentStatus.PENDING):
+            svc.reject_withdrawal(intent)
+            n += 1
+        self.message_user(request, f"{n} retrait(s) rejeté(s) et remboursé(s).", messages.SUCCESS)
 
 
 @admin.register(Match)
-class MatchAdmin(ReadOnlyAdmin):
+class MatchAdmin(ActionOnlyAdmin):
     list_display = ("created_at", "game_key", "opponent_type", "status", "stake_kind", "bet_amount", "is_training", "winner")
     list_filter = ("status", "opponent_type", "stake_kind", "is_training", "game_key")
     search_fields = ("id", "player_1__username", "player_2__username")
@@ -87,10 +107,7 @@ class MatchAdmin(ReadOnlyAdmin):
         for match in queryset:
             svc.void_match(match_id=match.id, reason="admin_void")
             done += 1
-        self.message_user(request, f"{done} match(s) annulé(s) et remboursé(s).", messages.SUCCESS)
-
-    def has_change_permission(self, request, obj=None):
-        return False  # lecture seule sauf actions
+        self.message_user(request, f"{done} match(s) traité(s) (annulés/remboursés si éligibles).", messages.SUCCESS)
 
 
 @admin.register(MatchEvent)

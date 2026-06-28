@@ -39,6 +39,22 @@ def test_transaction_immuable():
         tx.delete()
 
 
+def test_admins_a_actions_gardent_la_permission_de_modification():
+    # Garde-fou : les admins porteurs d'actions (void, approve/reject retrait) doivent
+    # garder has_change_permission par défaut, sinon Django masque le menu d'actions.
+    from django.contrib import admin as dj_admin
+
+    from backoffice.admin import MatchAdmin, PaymentIntentAdmin
+    from payments.models import PaymentIntent
+
+    pa = PaymentIntentAdmin(PaymentIntent, None)
+    ro = set(pa.get_readonly_fields(None))
+    assert {"amount", "status", "needs_review"} <= ro     # champs non éditables à la main
+    assert pa.has_add_permission(None) is False
+    assert PaymentIntentAdmin.has_change_permission is dj_admin.ModelAdmin.has_change_permission
+    assert MatchAdmin.has_change_permission is dj_admin.ModelAdmin.has_change_permission
+
+
 def test_transaction_admin_lecture_seule():
     admin = TransactionAdmin(Transaction, None)
     assert admin.has_add_permission(None) is False

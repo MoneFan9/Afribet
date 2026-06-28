@@ -122,6 +122,15 @@ class PaymentService:
         locked.save(update_fields=["external_ref", "needs_review"])
         return locked
 
+    @transaction.atomic
+    def reject_withdrawal(self, intent: PaymentIntent) -> PaymentIntent:
+        """Rejet admin d'un retrait en revue : **rembourse** la réservation et échoue l'ordre."""
+        locked = PaymentIntent.objects.select_for_update().get(pk=intent.pk)
+        if not locked.needs_review or locked.status != IntentStatus.PENDING:
+            return locked
+        self._fail(locked)  # inverse la réservation (credit_back) + statut FAILED
+        return locked
+
     # --- Callback prestataire (idempotent) -------------------------------
     @transaction.atomic
     def handle_callback(self, provider_key: str, payload: dict) -> PaymentIntent:

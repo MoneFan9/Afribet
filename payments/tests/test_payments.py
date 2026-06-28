@@ -142,6 +142,21 @@ def test_retrait_en_revue_non_regle_avant_validation():
     assert intent.status == IntentStatus.SETTLED and _avail(u) == 5000
 
 
+def test_retrait_en_revue_rejete_rembourse():
+    from accounts.models import KycStatus
+    from backoffice.models import PlatformConfig
+
+    PlatformConfig.objects.create(key="withdrawal_review_threshold", value=1000)
+    u = _user("rej", kyc_status=KycStatus.VERIFIED)
+    WalletService().credit(u, Money(10000, XAF), TxType.DEPOSIT)
+    svc = PaymentService()
+    intent = svc.withdraw(u, Money(5000, XAF), destination="+24106000000")
+    assert _avail(u) == 5000  # réservé
+    svc.reject_withdrawal(intent)
+    intent.refresh_from_db()
+    assert intent.status == IntentStatus.FAILED and _avail(u) == 10000  # remboursé
+
+
 def test_retrait_echec_recredite():
     from accounts.models import KycStatus
 
