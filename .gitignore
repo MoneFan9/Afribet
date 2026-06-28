@@ -30,8 +30,10 @@ htmlcov/
 
 # Node / front (Phase 10)
 node_modules/
-# static/dist/board.js (artefact compilé) est VERSIONNÉ pour un front runnable sans
-# build au déploiement ; le build CI (npm run build:ts) le régénère depuis static/src/.
+# Le `dist/` (Python) ci-dessus capturait static/dist/ ; on ré-inclut l'artefact TS
+# compilé pour un front runnable sans build au déploiement (build CI le régénère).
+!static/dist/
+!static/dist/board.js
 
 # IDE / OS
 .idea/
