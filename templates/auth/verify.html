@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Vérification — AfriBet{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-vert mb-2">Vérifiez votre e-mail</h1>
+<p class="text-sm text-gray-500 mb-4">Saisissez le code reçu par e-mail (visible dans la console en dev).</p>
+<form method="post" action="/verify/">{% csrf_token %}
+  {% include "components/form_fields.html" %}
+  <button class="btn btn-or mt-2">Valider</button>
+</form>
+{% endblock %}

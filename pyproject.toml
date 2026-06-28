@@ -24,4 +24,4 @@ python_files = ["test_*.py", "tests.py", "*_test.py"]
 # utilisent la base de test. asyncio auto pour les consumers Channels (Phase 7).
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["games", "core", "accounts", "wallet", "bonus", "payments", "matchmaking", "realtime", "compliance", "backoffice", "tests"]
+testpaths = ["games", "core", "accounts", "wallet", "bonus", "payments", "matchmaking", "realtime", "compliance", "backoffice", "frontend", "tests"]

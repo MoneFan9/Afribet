@@ -1,0 +1,13 @@
+{
+  "name": "afribet-front",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Front AfriBet — TypeScript (plateau Songo) compilé vers static/dist. Aucune lib JS hors HTMX (chargé via CDN).",
+  "scripts": {
+    "build:ts": "tsc -p tsconfig.json",
+    "watch:ts": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

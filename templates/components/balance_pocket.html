@@ -1,0 +1,6 @@
+{% load components %}
+<div class="rounded-xl p-4 shadow-sm bg-white border-l-4 border-{{ accent }}">
+  <div class="text-xs uppercase tracking-wide text-gray-500">{{ label }}</div>
+  <div class="text-2xl font-bold text-{{ accent }}">{% money amount currency %}</div>
+  {% if hint %}<div class="text-xs text-gray-400 mt-1">{{ hint }}</div>{% endif %}
+</div>

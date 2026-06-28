@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load components %}
+{% block title %}Lobby — AfriBet{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-vert mb-4">Défis ouverts</h1>
+
+{% if matches %}
+  <ul class="space-y-3">
+    {% for m in matches %}
+      <li class="bg-white rounded-xl p-4 shadow-sm flex items-center justify-between">
+        <div>
+          <div class="font-semibold text-vert">{{ m.game_key|title }} · {% money m.bet_amount m.currency %}</div>
+          <div class="text-xs text-gray-500">{{ m.get_timing_mode_display }} · {{ m.get_stake_kind_display }}</div>
+        </div>
+        <form method="post" action="/match/{{ m.id }}/join/">{% csrf_token %}
+          <button class="px-4 py-2 rounded-lg bg-or text-vert font-bold">Rejoindre</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-gray-500">Aucun défi ouvert pour le moment.</p>
+{% endif %}
+
+<div class="mt-6 bg-white rounded-xl p-4 shadow-sm">
+  <h2 class="font-semibold text-vert mb-2">Rejoindre par code</h2>
+  <form method="post" action="/lobby/">{% csrf_token %}
+    {% include "components/form_fields.html" with form=join_form %}
+    <button class="btn btn-vert">Rejoindre</button>
+  </form>
+</div>
+{% endblock %}

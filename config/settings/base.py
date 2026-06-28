@@ -63,6 +63,7 @@ LOCAL_APPS = [
     "ranking",
     "compliance",
     "backoffice",
+    "frontend",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -139,7 +140,13 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Front server-rendered (couche dialogue) : auth par session web.
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/"
 
 # --- DRF + JWT (EF2) ------------------------------------------------------
 REST_FRAMEWORK = {

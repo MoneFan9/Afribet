@@ -1,0 +1,20 @@
+/* Compléments au-delà de Tailwind (retours haptiques, focus accessible — ENF6). */
+:root { color-scheme: light; }
+* { -webkit-tap-highlight-color: rgba(212,160,23,.3); }
+button, a, [role="button"] { touch-action: manipulation; }
+:focus-visible { outline: 3px solid #D4A017; outline-offset: 2px; }
+.songo-hole { cursor: pointer; transition: transform .12s ease; }
+.songo-hole:active { transform: scale(.94); }
+
+/* Champs de formulaire (CDN Tailwind ne traite pas @apply → CSS simple). */
+.field { display:block; margin-bottom:.85rem; }
+.field > span { display:block; font-size:.8rem; font-weight:600; color:#14532D; margin-bottom:.25rem; }
+.field input, .field select, .field textarea {
+  width:100%; padding:.55rem .75rem; border:1px solid #d6c9a8;
+  border-radius:.6rem; background:#fff; color:#1f2937; font-size:1rem;
+}
+.btn { display:inline-block; width:100%; text-align:center; padding:.7rem 1rem;
+  border-radius:.7rem; font-weight:700; cursor:pointer; }
+.btn-or { background:#D4A017; color:#14532D; }
+.btn-vert { background:#14532D; color:#FBBF24; }
+.btn-ghost { background:transparent; color:#14532D; border:1px solid #14532D; }

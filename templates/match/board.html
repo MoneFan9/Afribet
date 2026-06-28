@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Partie Songo — AfriBet{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-3">
+  <h1 class="text-lg font-bold text-vert">Songo
+    {% if match.is_training %}<span class="text-xs text-gray-400">(entraînement)</span>{% endif %}
+  </h1>
+  <span id="status" class="text-sm text-gray-500">connexion…</span>
+</div>
+
+<!-- Plateau (rendu par board.ts ; SVG/Canvas amélioré prévu, cf. plan). -->
+<div id="board"
+     data-token="{{ ws_token }}"
+     data-match="{{ match.id }}"
+     data-myindex="{{ my_index }}"
+     class="bg-vert rounded-2xl p-3 shadow-inner select-none"></div>
+
+{{ match.game_state|json_script:"initial-state" }}
+
+<form id="forfeit" method="post" action="" class="mt-4">{% csrf_token %}
+  <button type="button" id="btn-forfeit" class="btn btn-ghost">Abandonner</button>
+</form>
+<p class="mt-3 text-xs text-gray-400">30 s par coup. Une déconnexion ouvre une fenêtre de
+  reconnexion ; en cas de panne de notre côté, la partie est annulée et remboursée.</p>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'dist/board.js' %}" defer></script>
+{% endblock %}

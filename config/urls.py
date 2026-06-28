@@ -11,4 +11,5 @@ urlpatterns = [
     path("api/payments/", include("payments.urls")),  # CU2, CU7
     path("api/matches/", include("matchmaking.urls")),  # CU3-CU8
     path("api/wallet/", include("wallet.urls")),  # EF5, CU17
+    path("", include("frontend.urls")),  # front mobile-first (Phase 10)
 ]

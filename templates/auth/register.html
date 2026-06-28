@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Inscription — AfriBet{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-vert mb-4">Créer un compte</h1>
+<form method="post" action="/register/">{% csrf_token %}
+  {% include "components/form_fields.html" %}
+  <button class="btn btn-or mt-2">S'inscrire</button>
+</form>
+<p class="mt-4 text-sm text-gray-500">Déjà inscrit ? <a class="text-terre underline" href="/login/">Se connecter</a></p>
+{% endblock %}

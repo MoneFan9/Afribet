@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load components %}
+{% block title %}Tableau de bord — AfriBet{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-vert mb-4">Bonjour {{ user.username }}</h1>
+
+<div class="grid grid-cols-2 gap-3 mb-5">
+  {% balance_pocket "Réel disponible" balance.real_available.amount accent="vert" %}
+  {% balance_pocket "Bonus virtuel" balance.bonus_available.amount accent="or" hint="convertible" %}
+</div>
+
+<div class="space-y-3">
+  <a href="/challenge/new/" class="btn btn-or">⚔️ Nouveau défi</a>
+  <form method="post" action="/train/">{% csrf_token %}
+    <button class="btn btn-ghost">🎓 S'entraîner contre l'IA (gratuit)</button>
+  </form>
+  <a href="/lobby/" class="btn btn-vert">🏟️ Rejoindre un défi (lobby)</a>
+  <a href="/wallet/" class="btn btn-ghost">💰 Portefeuille</a>
+</div>
+{% endblock %}

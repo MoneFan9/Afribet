@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load components %}
+{% block title %}Portefeuille — AfriBet{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-vert mb-4">Portefeuille</h1>
+
+<div class="grid grid-cols-2 gap-3 mb-2">
+  {% balance_pocket "Réel disponible" balance.real_available.amount accent="vert" %}
+  {% balance_pocket "Réel verrouillé" balance.real_locked.amount accent="terre" hint="en jeu" %}
+  {% balance_pocket "Bonus disponible" balance.bonus_available.amount accent="or" hint="convertible 200:1" %}
+  {% balance_pocket "Bonus verrouillé" balance.bonus_locked.amount accent="or" %}
+</div>
+
+<div class="mt-5 bg-white rounded-xl p-4 shadow-sm">
+  <h2 class="font-semibold text-vert mb-3">Recharger (sandbox)</h2>
+  <form method="post" action="/wallet/">{% csrf_token %}
+    <input type="hidden" name="action" value="deposit">
+    {% include "components/form_fields.html" with form=deposit_form %}
+    <button class="btn btn-or mt-1">Déposer</button>
+  </form>
+</div>
+
+<div class="mt-4 bg-white rounded-xl p-4 shadow-sm">
+  <h2 class="font-semibold text-vert mb-1">Convertir le bonus</h2>
+  <p class="text-xs text-gray-500 mb-3">Par tranches de 2 000 000 → 10 000 réels (sous KYC).</p>
+  <form method="post" action="/wallet/">{% csrf_token %}
+    <input type="hidden" name="action" value="convert">
+    <button class="btn btn-vert">Convertir maintenant</button>
+  </form>
+</div>
+{% endblock %}

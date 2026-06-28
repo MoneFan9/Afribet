@@ -1,0 +1,57 @@
+{% load static %}
+<!doctype html>
+<html lang="fr" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}AfriBet{% endblock %}</title>
+  <meta name="description" content="AfriBet — paris P2P sur jeux traditionnels africains (Songo).">
+  <!-- Tailwind (CDN au MVP ; build dédié prévu en prod, cf. plan Phase 10) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Design tokens (conception §6b) : terres cuites, or, vert profond.
+    tailwind.config = {
+      theme: { extend: { colors: {
+        terre:  { DEFAULT: '#B45309', dark: '#7C2D12' },
+        or:     { DEFAULT: '#D4A017', light: '#FBBF24' },
+        vert:   { DEFAULT: '#14532D', light: '#166534' },
+        sable:  '#FAF3E0',
+      }, fontFamily: { sans: ['system-ui', 'Segoe UI', 'Roboto', 'sans-serif'] } } }
+    }
+  </script>
+  <!-- HTMX (seule lib JS tolérée — conception §6b) -->
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body class="h-full bg-sable text-vert-light flex flex-col min-h-screen">
+  <header class="bg-vert text-or sticky top-0 z-10 shadow">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="font-bold text-lg tracking-tight">Afri<span class="text-or-light">Bet</span></a>
+      {% if user.is_authenticated %}
+        <nav class="flex items-center gap-3 text-sm">
+          <a href="/dashboard/" class="hover:text-or-light">Accueil</a>
+          <a href="/wallet/" class="hover:text-or-light">Portefeuille</a>
+          <a href="/lobby/" class="hover:text-or-light">Lobby</a>
+          <form action="/logout/" method="post" class="inline">{% csrf_token %}
+            <button class="hover:text-or-light">Quitter</button>
+          </form>
+        </nav>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="flex-1 w-full max-w-md mx-auto px-4 py-5">
+    {% if messages %}
+      {% for m in messages %}
+        <div class="mb-3 rounded-lg px-3 py-2 text-sm {% if m.tags == 'error' %}bg-terre-dark text-white{% else %}bg-or/20 text-vert{% endif %}">{{ m }}</div>
+      {% endfor %}
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="bg-vert text-or/70 text-xs text-center py-3">
+    AfriBet — jeu responsable. 18+. {% block footer %}{% endblock %}
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
